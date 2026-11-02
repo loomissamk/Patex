@@ -12,7 +12,8 @@
 .workbench.resizing .preview-body iframe{pointer-events:none}
 .focus-mode .assistant{position:absolute;right:0;top:64px;bottom:0;z-index:6;box-shadow:-10px 0 25px #070a12}
 .focus-mode .actions .light{display:inline-flex}
-.actions .project-panel-toggle{display:inline-flex}
+.topbar>.project-panel-toggle{display:inline-flex;flex-shrink:0}
+.sidebar-open .topbar>.project-panel-toggle{background:#29314f;color:#e8dfff;border-color:#6555b7}
 .focus-toggle{color:#ded5ff!important;border-color:#6555b7!important}
 .connections-panel{position:absolute;right:0;top:0;bottom:0;z-index:8;width:min(380px,95vw);display:flex;flex-direction:column;overflow:auto;background:#151e2d;border-left:1px solid #344259;box-shadow:-12px 0 30px #070a12}
 .connections-panel .assistant-head{flex-shrink:0}
@@ -49,9 +50,9 @@
   .focus-mode .editor-workspace,.focus-mode .preview-pane{min-height:0;border-top:0}
   .focus-mode .logo,.focus-mode .project-heading,.focus-mode .actions .light:not(.focus-toggle){display:none}
   .focus-mode .actions .light[title="New project"]{display:inline-flex}
-  .focus-mode .actions .project-panel-toggle{display:inline-flex}
+  .focus-mode .topbar>.project-panel-toggle{display:inline-flex}
   .focus-mode .project-panel-toggle span{display:none}
-  .focus-mode .topbar{justify-content:flex-end}
+  .focus-mode .topbar{justify-content:space-between}
   .focus-mode .assistant{width:min(90vw,325px)}
   .connections-panel{width:min(95vw,380px)}
   .focus-mode.sidebar-open .project-item{display:flex;width:100%}

@@ -234,11 +234,11 @@ export default function App() {
   };
   return <div className={`shell${focusMode ? ' focus-mode' : ''}${sidebarOpen ? ' sidebar-open' : ''}`}>
     <header className="topbar">
+      <button className="light project-panel-toggle" aria-label={sidebarOpen ? 'Hide project sidebar' : 'Show project sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(x => !x)}>{sidebarOpen ? <PanelLeftClose size={15}/> : <PanelLeftOpen size={15}/>}<span>Projects</span></button>
       <div className="logo"><span className="brand-symbol">P</span><div><strong>Patex</strong><small>SL Labs / LaTeX Studio</small></div></div>
       <div className="project-heading">{project ? <><FileText size={16}/><input aria-label="Project name" value={projectName} onChange={e => rename(e.target.value)} /></> : <span>Select a project</span>}</div>
       <div className="actions">
         <span className={`status ${status.includes('failed') || status.includes('errors') ? 'bad' : ''}`}>{compiling && <LoaderCircle className="spin" size={14}/>} {status}</span>
-        <button className="light project-panel-toggle" aria-label={sidebarOpen ? 'Hide project sidebar' : 'Show project sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(x => !x)}>{sidebarOpen ? <PanelLeftClose size={15}/> : <PanelLeftOpen size={15}/>}<span>Projects</span></button>
         <button className="light" onClick={() => void createProject()} disabled={creating} title="New project"><FilePlus size={16}/> New</button>
         <button className="primary" onClick={() => project && void compile(project.id, latex, projectName, revision.current)} disabled={!project || compiling}><Play size={15} fill="currentColor"/> Compile</button>
         <button className="light focus-toggle" aria-label={focusMode ? 'Exit 50/50 focus mode' : 'Enter 50/50 focus mode'} aria-pressed={focusMode} onClick={() => { setFocusMode(x => !x); setSidebarOpen(focusMode); }} >{focusMode ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}<span>{focusMode ? 'Exit focus' : '50/50 focus'}</span></button>
