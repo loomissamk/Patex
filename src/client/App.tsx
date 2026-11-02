@@ -26,6 +26,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [integrations, setIntegrations] = useState<Integrations | null>(null);
+  const [inlineAiStatus, setInlineAiStatus] = useState<'waiting' | 'ready' | 'unavailable'>('ready');
   const [editorWidth, setEditorWidth] = useState(() => {
     const stored = Number(localStorage.getItem('patex-editor-width'));
     return stored >= 25 && stored <= 75 ? stored : 50;
@@ -106,6 +107,7 @@ export default function App() {
       setDirty(false);
       setDiagnostics('');
       setAiReply(null);
+      setInlineAiStatus('ready');
       setStatus('Ready');
       sessionStorage.setItem('patex-last-project', next.id);
       void refreshPdf(next.id);
@@ -254,9 +256,9 @@ export default function App() {
       </aside>
       <main className="editor-workspace">
         <div className="pane-head"><span><Code2 size={16}/> LATEX SOURCE</span><div><button className="text-button" onClick={() => fileInput.current?.click()} disabled={!project}><Upload size={15}/> Import</button><input ref={fileInput} hidden type="file" accept=".tex,text/plain" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadTex(f); e.currentTarget.value = ''; }}/><button className="text-button" onClick={downloadText} disabled={!project}><Download size={14}/> .tex</button><span className="tab-label">main.tex</span></div></div>
-        {creating ? <div className="placeholder" role="status"><LoaderCircle className="spin" size={32}/><h2>Creating project…</h2></div> : project ? <div className="editor-wrapper"><LatexEditor key={project.id} value={latex} onChange={edit} onSave={() => { void save(project.id, latex, projectName, revision.current); }} onCompile={() => { void compile(project.id, latex, projectName, revision.current); }} requestCompletion={requestCompletion}/></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
+        {creating ? <div className="placeholder" role="status"><LoaderCircle className="spin" size={32}/><h2>Creating project…</h2></div> : project ? <div className="editor-wrapper"><LatexEditor key={project.id} value={latex} onChange={edit} onSave={() => { void save(project.id, latex, projectName, revision.current); }} onCompile={() => { void compile(project.id, latex, projectName, revision.current); }} requestCompletion={requestCompletion} onCompletionStatus={setInlineAiStatus}/></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
         {showDiagnostics && <div className="diagnostics"><div className="diagnostics-head"><Terminal size={14}/> COMPILE OUTPUT <button onClick={() => setShowDiagnostics(false)} aria-label="Close compile output"><X size={15}/></button></div><pre>{diagnostics || 'No output yet'}</pre></div>}
-        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><span>Tab accepts inline suggestions</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>Ctrl/Cmd+Enter compile</span></div>
+        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><span>{inlineAiStatus === 'waiting' ? 'AI suggesting…' : inlineAiStatus === 'unavailable' ? 'AI busy · LaTeX completion available' : 'Tab accepts inline suggestions'}</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>Ctrl/Cmd+Enter compile</span></div>
       </main>
       <div className="splitter" role="separator" aria-label="Resize editor and PDF panels" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={75} aria-valuenow={editorWidth} tabIndex={0}
         onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setResizing(true); }}
@@ -272,7 +274,7 @@ export default function App() {
         <p className="connections-intro">Choose the model for inline suggestions and writing help. Server credentials stay on the V100.</p>
         <label className="field-label" htmlFor="active-provider">ACTIVE AI PROVIDER</label>
         <select id="active-provider" value={provider} onChange={e => setProvider(e.target.value as Provider)}><option value="llamafarm">LlamaFarm</option><option value="anthropic">Claude API</option><option value="openai">OpenAI API</option></select>
-        <div className="connection-list">{(['llamafarm', 'anthropic', 'openai'] as const).map(item => <div className="connection-card" key={item}><div><strong>{item === 'llamafarm' ? 'LlamaFarm' : item === 'anthropic' ? 'Claude API' : 'OpenAI API'}</strong><span className={integrations?.[item].configured ? 'connection-ready' : 'connection-missing'}>{integrations?.[item].configured ? 'Configured' : 'Needs server key'}</span></div><small>{integrations?.[item].model || (item === 'llamafarm' ? 'Set LLAMAFARM_CHAT_URL and LLAMAFARM_MODEL' : `Set ${item === 'anthropic' ? 'ANTHROPIC' : 'OPENAI'}_API_KEY`)}</small></div>)}</div>
+        <div className="connection-list">{(['llamafarm', 'anthropic', 'openai'] as const).map(item => <div className="connection-card" key={item}><div><strong>{item === 'llamafarm' ? 'LlamaFarm' : item === 'anthropic' ? 'Claude API' : 'OpenAI API'}</strong><span className={integrations?.[item].configured ? 'connection-ready' : 'connection-missing'}>{integrations?.[item].configured ? (item === 'llamafarm' ? 'Endpoint set' : 'Key set') : (item === 'llamafarm' ? 'Needs endpoint' : 'Needs server key')}</span></div><small>{integrations?.[item].model || (item === 'llamafarm' ? 'Set LLAMAFARM_CHAT_URL and LLAMAFARM_MODEL' : `Set ${item === 'anthropic' ? 'ANTHROPIC' : 'OPENAI'}_API_KEY`)}</small></div>)}</div>
         <div className="connection-card mcp-card"><div><strong>Patex MCP tools</strong><span className={integrations?.mcp.configured ? 'connection-ready' : 'connection-missing'}>{integrations?.mcp.configured ? 'Ready' : 'Needs token'}</span></div><code>{window.location.origin}/mcp</code><button className="light" onClick={() => void copyMcpEndpoint()}>Copy endpoint</button><small>Bot clients need the server access token. This page does not expose it.</small></div>
         <label className="token-field"><KeyRound size={15}/><input type="password" aria-label="Patex access token" placeholder="Access token for direct access" value={token} onChange={e => setToken(e.target.value)}/></label>
         <small className="connection-footnote">The SL Labs proxy signs browser API requests automatically. Model availability depends on the provider runtime.</small>
