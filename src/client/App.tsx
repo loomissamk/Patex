@@ -32,6 +32,8 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const pdfUrlRef = useRef<string | null>(null);
   const activeProjectRef = useRef('');
+  const projectLoadSequence = useRef(0);
+  const fileLoadSequence = useRef(0);
   const autoBuildInputRef = useRef('');
   const needsBuildRef = useRef(false);
   const [supportRevision, setSupportRevision] = useState(0);
@@ -141,6 +143,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   }, [api]);
   useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
   const openProject = useCallback(async (id: string, skipSave = false) => {
+    const request = ++projectLoadSequence.current; fileLoadSequence.current++;
     try {
       const previous = activeProjectRef.current;
       if (previous && previous !== id && compilingRef.current) void api(`/api/projects/${previous}/cancel-build`, { method: 'POST' }).catch(() => {});
@@ -160,6 +163,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
       }
       const res = await api(`/api/projects/${id}`);
       const next = await res.json() as Project;
+      if (projectLoadSequence.current !== request) return;
       revision.current++;
       latestEditRef.current = { id: next.id, source: next.latex, name: next.name };
       activeProjectRef.current = next.id;
@@ -193,7 +197,9 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   useEffect(() => {
     if (loadedTokenRef.current === token) return;
     loadedTokenRef.current = token;
+    const initialSelection = projectLoadSequence.current;
     void listProjects().then(entries => {
+      if (projectLoadSequence.current !== initialSelection) return;
       const previous = sessionStorage.getItem('patex-last-project');
       const selected = entries.find(p => p.id === previous) || entries[0];
       if (selected) return openProject(selected.id);
@@ -312,6 +318,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
     setStatus('Editing bibliography…');
   };
   const selectFile = async (file: 'latex' | 'bibliography' | ScriptLanguage) => {
+    fileLoadSequence.current++;
     const pending = pendingScriptRef.current;
     try {
       await saveSupport(); setSupportPath(null);
@@ -476,12 +483,14 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
     catch (error) { setStatus((error as Error).message); }
   };
   const openSupportingFile = async (file: ProjectFileSummary) => {
+    const request = ++fileLoadSequence.current;
     if (!project) return;
     if (file.name === project.mainFile) { await selectFile('latex'); return; }
     const bibPath = project.mainFile.includes('/') ? project.mainFile.slice(0, project.mainFile.lastIndexOf('/') + 1) + 'references.bib' : 'references.bib';
     if (file.name === bibPath) { await selectFile('bibliography'); return; }
     try {
       await saveSupport(); const response = await api(`/api/projects/${project.id}/files/content?name=${encodeURIComponent(file.name)}`);
+      if (fileLoadSequence.current !== request || activeProjectRef.current !== project.id) return;
       if (!file.text || file.size > 1_000_000) { const url = URL.createObjectURL(await response.blob()); const a = document.createElement('a'); a.href = url; a.download = file.name.split('/').pop()!; a.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); return; }
       setSupportText(await response.text()); setSupportPath(file.name); setActiveFile('latex');
     } catch (error) { setStatus((error as Error).message); }
@@ -502,7 +511,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const openHistory = async () => { if (!project) return; try { await flushProject(); const response = await api(`/api/projects/${project.id}/history`); setHistory(await response.json() as RevisionSummary[]); } catch (error) { setStatus((error as Error).message); } };
   const restoreRevision = async (id: string) => {
     if (!project || !window.confirm('Restore this revision? The current version is saved to history first.')) return;
-    try { await api(`/api/projects/${project.id}/cancel-build`, { method: 'POST' }); await api(`/api/projects/${project.id}/history/${id}/restore`, { method: 'POST' }); pendingSupportRef.current = null; pendingBibliographyRef.current = null; pendingScriptRef.current = null; setHistory(null); await openProject(project.id, true); needsBuildRef.current = true; const restored = latestEditRef.current; void compile(restored.id, restored.source, restored.name, revision.current, true); }
+    try { await api(`/api/projects/${project.id}/cancel-build`, { method: 'POST' }); await api(`/api/projects/${project.id}/history/${id}/restore`, { method: 'POST' }); pendingSupportRef.current = null; pendingBibliographyRef.current = null; pendingScriptRef.current = null; setHistory(null); await openProject(project.id, true); if (activeProjectRef.current !== project.id) return; needsBuildRef.current = true; const restored = latestEditRef.current; void compile(restored.id, restored.source, restored.name, revision.current, true); }
     catch (error) { setStatus((error as Error).message); }
   };
   const navigateSource = async (page: number, x: number, y: number) => {
