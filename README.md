@@ -5,6 +5,7 @@ A ready-to-extend **TypeScript/React + Node.js** LaTeX/PDF workspace. Edit sourc
 ## Features
 
 - Default 50/50 LaTeX source and live PDF view, with a collapsible project panel
+- Draggable editor/PDF split; double-click the divider or press Home on it to restore 50/50
 - CodeMirror LaTeX editor with command completion and AI text suggested at the cursor; Tab accepts and Escape dismisses
 - Creates, names and persists LaTeX projects in a Docker volume
 - Debounced autosave and auto-compile after edits; manual **Compile** (Ctrl/Cmd+Enter)
@@ -94,6 +95,7 @@ Compiler container: nonroot Node + pdflatex -no-shell-escape (CPU and memory lim
 - PDF compilation supports a single `main.tex` document; bibliography/multifile projects and uploaded images are out of scope for the MVP.
 - PDF preview uses browser-native embedding, not full PDF.js annotation tools.
 - R/Python execution and generated plots are not yet supported.
+- R, Python, JavaScript execution and a future subscription release are tracked in [ROADMAP.md](ROADMAP.md).
 - Authentication is a single bearer token and Tailscale boundary; production public deployment requires a more complete identity/access model and TLS.
 - When editing rapidly, only one compilation is sent at a time; rapid edits may temporarily leave the last successful PDF visible until another build.
 - No direct file management of uploaded PDFs or multiuser collaboration yet.

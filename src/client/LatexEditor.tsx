@@ -97,7 +97,9 @@ export default function LatexEditor({ value, onChange, onSave, onCompile, reques
             const source = update.state.doc.toString();
             callbacks.current.onChange(source);
             const cursor = update.state.selection.main.head;
-            if (cursor < 20 || update.state.doc.lineAt(cursor).to !== cursor) return;
+            const beforeCursor = source.slice(0, cursor);
+            if (cursor < 20 || update.state.doc.lineAt(cursor).to !== cursor ||
+              !beforeCursor.includes('\\begin{document}') || beforeCursor.lastIndexOf('\\end{document}') > beforeCursor.lastIndexOf('\\begin{document}')) return;
             const currentSequence = sequence;
             timer = window.setTimeout(async () => {
               controller = new AbortController();

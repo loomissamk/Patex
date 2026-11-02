@@ -46,6 +46,12 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
     if (auth !== `Bearer ${options.token}`) { res.status(401).json({ error: 'Invalid access token' }); return; }
     next();
   });
+  app.get('/api/integrations', (_req, res) => res.json({
+    llamafarm: { configured: Boolean(process.env.LLAMAFARM_CHAT_URL && process.env.LLAMAFARM_MODEL), model: process.env.LLAMAFARM_MODEL || '' },
+    anthropic: { configured: Boolean(process.env.ANTHROPIC_API_KEY), model: process.env.ANTHROPIC_MODEL || '' },
+    openai: { configured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || '' },
+    mcp: { configured: Boolean(options.token) },
+  }));
   app.get('/api/projects', async (_req, res, next) => {
     try { res.json(await store.list()); } catch (err) { next(err); }
   });
