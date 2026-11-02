@@ -11,12 +11,13 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 - [x] Store `references.bib` and build a cited Rmd PDF and a cited native TeX PDF in staging.
 - [x] Add opt-in local accepted/rejected AI feedback records with export and deletion APIs; no model-training transfer.
 - [x] Verify browser creation/edit/preview and feedback controls against the staging app; confirm Rmd citation text in the generated PDF.
-- [ ] Deploy the branch through Nginx and repeat the live checks without touching existing projects.
+- [x] Deploy through Nginx; verify live Rmd and Qmd computed PDF text, resolve an Rmd citation, and preserve the existing homework PDF byte for byte.
 
 ### 1. Document-first authoring
 
 - [ ] Keep existing `main.tex` projects working unchanged. Add `main.Rmd`/`main.qmd` documents as first-class project sources; import the user's existing files without silently rewriting them.
 - [ ] Render R/R Markdown code chunks, inline values, LaTeX math, raw LaTeX results, plots, tables, and prose in source order. Start with a real Stats Methods Rmd fixture modeled on the existing homework workflow.
+- [ ] Detect inline-only Qmd engine requirements and either choose the correct engine from its inline language or show a clear build diagnostic. Quarto currently leaves an R inline expression literal when the document has neither a code cell nor explicit `engine: knitr`.
 - [ ] Add Python chunks to the same literate document using a documented engine and reproducible environment; add TypeScript chunks with a controlled Node runner. Preserve state within each language during one build and exchange data through explicit files/artifacts.
 - [ ] Keep the source/PDF split at 50/50 by default. Build after a short typing pause, cancel or supersede stale builds, keep the last good PDF, preserve preview position, and show errors at their source lines. Long code cells need an explicit run control and cache/freeze options.
 - [ ] Allow a project to contain supporting source, images, data, and generated artifacts without making separate script tabs the primary writing flow.
