@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, Bot, Check, ChevronDown, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelRightClose, Play, Sparkles, Terminal, Upload, X } from 'lucide-react';
+import { BookOpen, Bot, Check, ChevronDown, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, Play, Sparkles, Terminal, Upload, X } from 'lucide-react';
 
 type ProjectSummary = { id: string; name: string; updatedAt: string; hasPdf: boolean };
 type Project = ProjectSummary & { latex: string };
@@ -16,10 +16,12 @@ export default function App() {
   const [status, setStatus] = useState('Ready');
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const pdfUrlRef = useRef<string | null>(null);
+  const activeProjectRef = useRef('');
   const [diagnostics, setDiagnostics] = useState('');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [provider, setProvider] = useState<Provider>('llamafarm');
   const [prompt, setPrompt] = useState('');
   const [aiReply, setAiReply] = useState<AiReply | null>(null);
@@ -50,11 +52,14 @@ export default function App() {
   const refreshPdf = useCallback(async (id: string) => {
     try {
       const res = await api(`/api/projects/${id}/pdf`);
-      const blobUrl = URL.createObjectURL(await res.blob());
+      const pdf = await res.blob();
+      if (activeProjectRef.current !== id) return;
+      const blobUrl = URL.createObjectURL(pdf);
       if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
       pdfUrlRef.current = blobUrl;
       setPdfUrl(blobUrl);
     } catch {
+      if (activeProjectRef.current !== id) return;
       if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
       pdfUrlRef.current = null;
       setPdfUrl(null);
@@ -70,6 +75,10 @@ export default function App() {
       const next = await res.json() as Project;
       revision.current++;
       latestEditRef.current = { id: next.id, source: next.latex, name: next.name };
+      activeProjectRef.current = next.id;
+      if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+      pdfUrlRef.current = null;
+      setPdfUrl(null);
       setProject(next);
       setProjectName(next.name);
       setLatex(next.latex);
@@ -192,18 +201,19 @@ export default function App() {
       requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; });
     }
   };
-  return <div className={`shell${focusMode ? ' focus-mode' : ''}`}>
+  return <div className={`shell${focusMode ? ' focus-mode' : ''}${sidebarOpen ? ' sidebar-open' : ''}`}>
     <header className="topbar">
       <div className="logo"><span className="brand-symbol">P</span><div><strong>Patex</strong><small>SL Labs / LaTeX Studio</small></div></div>
       <div className="project-heading">{project ? <><FileText size={16}/><input aria-label="Project name" value={projectName} onChange={e => rename(e.target.value)} /></> : <span>Select a project</span>}</div>
       <div className="actions">
         <span className={`status ${status.includes('failed') || status.includes('errors') ? 'bad' : ''}`}>{compiling && <LoaderCircle className="spin" size={14}/>} {status}</span>
+        <button className="light project-panel-toggle" aria-label={sidebarOpen ? 'Hide project sidebar' : 'Show project sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(x => !x)}>{sidebarOpen ? <PanelLeftClose size={15}/> : <PanelLeftOpen size={15}/>}<span>Projects</span></button>
         {focusMode && <select className="project-switcher" aria-label="Switch project" value={project?.id || ''} onChange={e => { if (e.target.value) void openProject(e.target.value); }}><option value="">Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
         <button className="light" onClick={() => void createProject()} title="New project"><FilePlus size={16}/> New</button>
         <button className="light" onClick={downloadText} disabled={!project} title="Export .tex"><Code2 size={16}/> .tex</button>
         <button className="light" onClick={() => void downloadPdf()} disabled={!project || !pdfUrl} title="Download PDF"><Download size={16}/> PDF</button>
         <button className="primary" onClick={() => project && void compile(project.id, latex, projectName, revision.current)} disabled={!project || compiling}><Play size={15} fill="currentColor"/> Compile</button>
-        <button className="light focus-toggle" aria-label={focusMode ? 'Exit 50/50 focus mode' : 'Enter 50/50 focus mode'} aria-pressed={focusMode} onClick={() => setFocusMode(x => !x)}>{focusMode ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}<span>{focusMode ? 'Exit focus' : '50/50 focus'}</span></button>
+        <button className="light focus-toggle" aria-label={focusMode ? 'Exit 50/50 focus mode' : 'Enter 50/50 focus mode'} aria-pressed={focusMode} onClick={() => { setFocusMode(x => !x); setSidebarOpen(focusMode); }} >{focusMode ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}<span>{focusMode ? 'Exit focus' : '50/50 focus'}</span></button>
         <button className="icon-button" title="Toggle AI assistant" aria-label="Toggle AI assistant" onClick={() => setAiOpen(x => !x)}><Sparkles size={19}/></button>
       </div>
     </header>
@@ -212,7 +222,7 @@ export default function App() {
         <div className="sidebar-heading"><strong>WORKSPACE</strong><button className="icon-button" title="New project" onClick={() => void createProject()}><FilePlus size={18}/></button></div>
         <button className="new-project" onClick={() => void createProject()}><FilePlus size={16}/> New project</button>
         <div className="nav-header"><BookOpen size={13}/> PROJECTS</div>
-        {projects.map(p => <button key={p.id} className={`project-item ${p.id === project?.id ? 'selected' : ''}`} onClick={() => void openProject(p.id)}><FileText size={16}/><span>{p.name}</span></button>)}
+        {projects.map(p => <button key={p.id} className={`project-item ${p.id === project?.id ? 'selected' : ''}`} onClick={() => { void openProject(p.id); if (focusMode) setSidebarOpen(false); }}><FileText size={16}/><span>{p.name}</span></button>)}
         {projects.length === 0 && <p className="empty-sidebar">Create a project to begin writing.</p>}
         <div className="sidebar-bottom"><KeyRound size={13}/><input type="password" aria-label="Patex access token" placeholder="Access token (if set)" value={token} onChange={e => setToken(e.target.value)}/></div>
       </aside>
