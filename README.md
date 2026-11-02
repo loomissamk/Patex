@@ -17,7 +17,7 @@ The browser editor works on macOS, Windows, and Linux. Its Ctrl/Cmd shortcuts us
 - Insert generated `.tex`, `.png`, `.jpg`, or `.pdf` files into the LaTeX source and rebuild the PDF
 - Ask LlamaFarm (OpenAI-compatible chat endpoint), Anthropic Claude API, or OpenAI API for LaTeX help
 - AI outputs are **suggestions**; explicit Apply button before source changes
-- MCP stdio and token-protected Streamable HTTP tools: list/get/create/update/compile projects for Claude Code, Codex and other MCP clients
+- MCP stdio and token-protected Streamable HTTP tools: list/get/create/update/compile projects, edit/run scripts, and list generated files for Claude Code, Codex and other MCP clients
 - Separate Debian slim compiler container with restricted permissions, no shell escape, resource limits
 - TypeScript strict checking, ESLint, Jest unit/integration tests, SonarQube configuration and GitHub Actions
 - Private local-only port `127.0.0.1:4318` intended for Codex-managed Nginx/Tailscale reverse proxy
@@ -75,7 +75,7 @@ For MCP agents, Patex exposes the same project tools over stdio and `POST /mcp` 
 }
 ```
 
-The stdio server runs inside the app container so it shares project storage. The HTTP route makes those tools available to remote MCP clients over your private network when they have the token. The Patex chat panel calls LlamaFarm's chat API; **consuming LlamaFarm's own MCP tools** from that panel is not implemented. Do not expose `docker exec` access to an untrusted agent.
+The stdio server runs inside the app container so it shares project storage. The HTTP route makes those tools available to remote MCP clients over your private network when they have the token. Agents can edit and run the same JavaScript, Python, and R project scripts as the browser, then compile the resulting artifacts into the PDF. The Patex chat panel calls LlamaFarm's chat API; **consuming LlamaFarm's own MCP tools** from that panel is not implemented. Do not expose `docker exec` access to an untrusted agent.
 
 ## Research code in a document
 

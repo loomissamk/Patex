@@ -27,5 +27,8 @@ describe('HTTP API', () => {
     await request(app).post('/mcp').set('Host', 'localhost').set('Accept', 'application/json, text/event-stream').send(payload).expect(401);
     const response = await request(app).post('/mcp').set('Host', 'localhost').set('Authorization', 'Bearer test-token').set('Accept', 'application/json, text/event-stream').send(payload).expect(200);
     expect(response.text).toContain('patex_list_projects');
+    expect(response.text).toContain('patex_update_script');
+    expect(response.text).toContain('patex_run_script');
+    expect(response.text).toContain('patex_list_artifacts');
   });
 });
