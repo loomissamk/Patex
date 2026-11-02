@@ -192,9 +192,13 @@ export default function SourceEditor({ language, value, onChange, onSave, onExec
   useEffect(() => {
     const view = viewRef.current; if (!view || !insertSnippet) return;
     const selection = view.state.selection.main;
+    const source = view.state.doc.toString();
+    let from = selection.from; let to = selection.to;
+    if (language === 'latex' && (!source.slice(0, from).includes('\\begin{document}') || source.slice(0, from).includes('\\end{document}'))) from = to = source.indexOf('\\end{document}') >= 0 ? source.indexOf('\\end{document}') : source.length;
+    if (language === 'rmd' || language === 'qmd') { const yaml = source.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/); if (yaml && from < yaml[0].length) from = to = yaml[0].length; }
     let template = insertSnippet.template;
-    if (!insideMath(view.state.doc.toString(), selection.from)) template = insertSnippet.block ? language === 'latex' ? `\\[\n${template}\n\\]` : `$$\n${template}\n$$` : `$${template}$`;
-    snippet(template)(view, { label: 'Math expression' }, selection.from, selection.to); view.focus(); onInserted?.();
+    if (!insideMath(source, from)) template = insertSnippet.block ? language === 'latex' ? `\n\\[\n${template}\n\\]\n` : `\n$$\n${template}\n$$\n` : `$${template}$`;
+    snippet(template)(view, { label: 'Math expression' }, from, to); view.focus(); onInserted?.();
   }, [insertSnippet, language, onInserted]);
 
   return <div className="source-editor" ref={host}/>;

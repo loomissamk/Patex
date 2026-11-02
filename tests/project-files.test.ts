@@ -4,11 +4,22 @@ import path from 'node:path';
 import { readArchive, writeArchive } from '../src/server/archive.js';
 import { decodedFiles, projectPath } from '../src/shared/project-files.js';
 import { ProjectStore } from '../src/server/store.js';
+import { ZipFile } from 'yazl';
 const file = (name: string, text: string) => ({ name, base64: Buffer.from(text).toString('base64') });
 test('rejects traversal, absolute, Windows and case-colliding paths', () => {
   for (const name of ['../escape', '/etc/passwd', 'R/../../escape', 'C:/test', 'R\\utils.R', 'folder/CON.txt', 'a//b', '.patex-output.pdf']) expect(() => projectPath(name)).toThrow();
   expect(() => decodedFiles([file('R/utils.R', 'a'), file('r/UTILS.R', 'b')])).toThrow('Duplicate');
+  expect(() => decodedFiles([file('R', 'a'), file('R/utils.R', 'b')])).toThrow('conflicts');
   expect(projectPath('.here')).toBe('.here');
+});
+test('rejects compressed oversized entries and symlinks before importing them', async () => {
+  const archive = async (symlink: boolean) => {
+    const zip = new ZipFile(); const chunks: Buffer[] = [];
+    const result = new Promise<Buffer>((resolve, reject) => { zip.outputStream.on('data', (chunk: Buffer) => chunks.push(chunk)); zip.outputStream.on('end', () => resolve(Buffer.concat(chunks))); zip.outputStream.on('error', reject); });
+    zip.addBuffer(symlink ? Buffer.from('/etc/passwd') : Buffer.alloc(9 * 1024 * 1024), symlink ? 'link' : 'huge.csv', { mode: symlink ? 0o120777 : 0o100644 }); zip.end(); return result;
+  };
+  await expect(readArchive(await archive(true))).rejects.toThrow('symlinks');
+  await expect(readArchive(await archive(false))).rejects.toThrow('size limit');
 });
 test('round trips a nested project without changing source or support bytes', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'patex-bundle-'));
