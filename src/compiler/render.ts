@@ -8,6 +8,42 @@ import type { Artifact, CompileResult, DocumentFormat } from '../shared/types.js
 
 const execFileAsync = promisify(execFile);
 
+// Quarto's default Markdown reader does not treat legacy R Markdown \(...\)
+// and \[...\] as math. Change only the temporary render copy, never the
+// project source, and leave fenced code and TeX row spacing (\\[6pt]) alone.
+export function normalizeRmdMath(source: string): string {
+  let fence: { marker: string; length: number } | undefined;
+  return source.replace(/\r\n/g, '\n').split('\n').map(line => {
+    const boundary = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence) {
+      if (boundary && boundary[1][0] === fence.marker && boundary[1].length >= fence.length) fence = undefined;
+      return line;
+    }
+    if (boundary) { fence = { marker: boundary[1][0], length: boundary[1].length }; return line; }
+    if (/^\s*\\\[\s*$/.test(line)) return line.replace('\\[', () => '$$');
+    if (/^\s*\\\]\s*$/.test(line)) return line.replace('\\]', () => '$$');
+    let output = '';
+    let ticks = 0;
+    for (let i = 0; i < line.length;) {
+      if (line[i] === '`') {
+        let end = i + 1;
+        while (line[end] === '`') end++;
+        const count = end - i;
+        ticks = ticks === 0 ? count : ticks === count ? 0 : ticks;
+        output += line.slice(i, end);
+        i = end;
+      } else if (ticks === 0 && line.startsWith('\\(', i)) {
+        const end = line.indexOf('\\)', i + 2);
+        if (end > i && !line.slice(i + 2, end).includes('`')) {
+          output += `$${line.slice(i + 2, end)}$`;
+          i = end + 2;
+        } else { output += line[i]; i++; }
+      } else { output += line[i]; i++; }
+    }
+    return output;
+  }).join('\n');
+}
+
 export function attachBibliography(source: string, bibliography: string): string {
   if (!bibliography) return source;
   const normalized = source.replace(/\r\n/g, '\n');
@@ -26,7 +62,8 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
   const workdir = await mkdtemp(path.join(tmpdir(), 'patex-document-'));
   try {
     const filename = format === 'rmd' ? 'main.Rmd' : 'main.qmd';
-    await writeFile(path.join(workdir, filename), attachBibliography(source, bibliography), { mode: 0o600 });
+    const renderSource = format === 'rmd' ? normalizeRmdMath(source) : source;
+    await writeFile(path.join(workdir, filename), attachBibliography(renderSource, bibliography), { mode: 0o600 });
     if (bibliography) await writeFile(path.join(workdir, 'references.bib'), bibliography, { mode: 0o600 });
     await mkdir(path.join(workdir, 'assets'), { mode: 0o700 });
     let total = 0;
