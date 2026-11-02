@@ -12,7 +12,7 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 - [x] Add opt-in local accepted/rejected AI feedback records with export and deletion APIs; no model-training transfer.
 - [x] Verify browser creation/edit/preview and feedback controls against the staging app; confirm Rmd citation text in the generated PDF.
 - [x] Deploy through Nginx; verify live Rmd and Qmd computed PDF text, resolve an Rmd citation, and preserve the existing homework PDF byte for byte.
-- [x] Compile an existing single-file matrix homework unchanged; compile a substantial statistics homework after embedding its external R helper in a copy. Render a standalone mixed R/Python/typed Node/math/plot/citation example in staging and inspect its PDF text.
+- [x] Compile an existing single-file matrix homework unchanged; compile a substantial statistics homework after embedding its external R helper in a copy. Render a standalone mixed R/Python/typed Node/math/plot/citation example in staging and live Patex, and inspect both PDF pages.
 
 ### 1. Document-first authoring
 
@@ -42,6 +42,7 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 
 - [ ] Isolate each untrusted code run from the app and network with CPU, memory, process, time, and storage quotas. Pin runtimes and dependencies; capture provenance for every PDF.
 - [ ] Add project history, backups, recovery, cross-browser and accessibility tests, and an end-to-end test using both an Rmd and a native TeX document.
+- [ ] Add project archive/delete and restore controls so users can clear the workspace without server filesystem access.
 - [ ] Before public signups: user and organization identity, project permissions, TLS, audit logs, abuse controls, billing, support, and a security review. Validate demand with researchers using real manuscripts.
 
 ## Current baseline

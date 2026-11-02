@@ -478,7 +478,7 @@ export default function App() {
       <form className="project-dialog" aria-label="Create document" onSubmit={event => { event.preventDefault(); void createProject(); }}>
         <div className="dialog-heading"><h2>New document</h2><button type="button" className="icon-button" aria-label="Close" onClick={() => setNewProjectOpen(false)}><X size={17}/></button></div>
         <label>Name<input autoFocus maxLength={100} value={draftName} onChange={event => setDraftName(event.target.value)}/></label>
-        <label>Source format<select value={draftFormat} onChange={event => setDraftFormat(event.target.value as DocumentFormat)}><option value="rmd">R Markdown — prose, math, and R chunks</option><option value="qmd">Quarto — literate document</option><option value="tex">LaTeX — native .tex</option></select></label>
+        <label>Source format<select value={draftFormat} onChange={event => setDraftFormat(event.target.value as DocumentFormat)}><option value="rmd">R Markdown — math, R, Python, and Node in one file</option><option value="qmd">Quarto — literate document</option><option value="tex">LaTeX — native .tex</option></select></label>
         <p>Write in one source file. The PDF builds beside it after you pause typing.</p>
         <button type="submit" className="primary" disabled={creating || !draftName.trim()}>{creating ? 'Creating…' : 'Create document'}</button>
       </form>
