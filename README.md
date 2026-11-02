@@ -4,7 +4,8 @@ A ready-to-extend **TypeScript/React + Node.js** LaTeX/PDF workspace. Edit sourc
 
 ## Features
 
-- Split-screen LaTeX source editor and browser PDF preview
+- Default 50/50 LaTeX source and live PDF view, with a collapsible project panel
+- CodeMirror LaTeX editor with command completion and AI text suggested at the cursor; Tab accepts and Escape dismisses
 - Creates, names and persists LaTeX projects in a Docker volume
 - Debounced autosave and auto-compile after edits; manual **Compile** (Ctrl/Cmd+Enter)
 - Shows LaTeX compile errors and keeps the last successful PDF visible
@@ -28,7 +29,7 @@ docker compose -f compose.yml up -d --build
 curl http://127.0.0.1:4318/api/health
 ```
 
-Browse **http://127.0.0.1:4318** from the host, or access via your Tailscale-only reverse proxy. Enter the `PATEX_ACCESS_TOKEN` in the Patex sidebar. Do not paste the server's sudo password into `.env`.
+Browse **http://127.0.0.1:4318** from the host, or access via your Tailscale-only reverse proxy. For direct access, open **Projects** and enter the `PATEX_ACCESS_TOKEN` in the sidebar. The SL Labs Nginx setup injects that token for browser `/api/` requests. Do not paste the server's sudo password into `.env`.
 
 A generic Nginx example is in `infra/nginx-patex.conf.example`. The actual private routes and client hostname setup belong in a separate infrastructure repository. This project does not provision DNS or certificates.
 
@@ -49,6 +50,8 @@ For local development the UI is at **http://127.0.0.1:5173**. The browser proxie
 ## AI integration
 
 Patex does not automatically inherit your ChatGPT/Claude web subscriptions or ChatGPT's tools. Set provider API credentials and a local model endpoint explicitly.
+
+The editor offers LaTeX command completions locally. After you pause typing at the end of a line, it requests an inline text suggestion from the selected provider. Model suggestions depend on provider availability and response time; editing, saving and compiling continue when a model is busy or offline.
 
 - `LLAMAFARM_CHAT_URL` is the **full** OpenAI-compatible `.../v1/chat/completions` endpoint; set `LLAMAFARM_MODEL` to the **actual** model identifier returned by your server. Do not assume `/mcp` is a chat-completions endpoint.
 - `ANTHROPIC_API_KEY` for Claude API; `ANTHROPIC_MODEL` chooses a model available to your key.
@@ -90,6 +93,7 @@ Compiler container: nonroot Node + pdflatex -no-shell-escape (CPU and memory lim
 - Compiler rejects sources over 200 KB and PDFs over 5 MB, uses temporary working directories and disables TeX `shell-escape`. The container is non-root, read-only, and resource limited. TeX is complex; **do not treat this as secure multi-tenant arbitrary-file processing** without further isolation (network denial for compiler plus IPC, seccomp/AppArmor policy, stronger filesystem isolation).
 - PDF compilation supports a single `main.tex` document; bibliography/multifile projects and uploaded images are out of scope for the MVP.
 - PDF preview uses browser-native embedding, not full PDF.js annotation tools.
+- R/Python execution and generated plots are not yet supported.
 - Authentication is a single bearer token and Tailscale boundary; production public deployment requires a more complete identity/access model and TLS.
 - When editing rapidly, only one compilation is sent at a time; rapid edits may temporarily leave the last successful PDF visible until another build.
 - No direct file management of uploaded PDFs or multiuser collaboration yet.

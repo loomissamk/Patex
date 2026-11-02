@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { ProjectStore } from './store.js';
-import { askAI } from './ai.js';
+import { askAI, completeAI } from './ai.js';
 import { createPatexMcpServer } from './mcp-server.js';
 import type { AiProvider, CompileResult } from '../shared/types.js';
 
@@ -102,6 +102,17 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       const project = await store.get(projectId);
       res.json(await askAI(provider as AiProvider, prompt, project.latex));
     } catch (err) { next(err); }
+  });
+  app.post('/api/complete', async (req, res, next) => {
+    const controller = new AbortController();
+    res.on('close', () => controller.abort());
+    try {
+      const { provider, prefix, suffix } = req.body;
+      if (!['llamafarm', 'anthropic', 'openai'].includes(provider) || typeof prefix !== 'string' || typeof suffix !== 'string' || prefix.length > 4000 || suffix.length > 2000) {
+        res.status(400).json({ error: 'Invalid completion request' }); return;
+      }
+      res.json({ text: await completeAI(provider as AiProvider, prefix, suffix, controller.signal) });
+    } catch (err) { if (!controller.signal.aborted) next(err); }
   });
   app.use('/api', ((_err, _req, res, _next) => {
     const e = _err as NodeJS.ErrnoException;

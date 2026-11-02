@@ -9,6 +9,18 @@
 .actions .project-panel-toggle{display:inline-flex}
 .project-switcher{max-width:160px;min-width:100px;background:#182236;border:1px solid #39455b;border-radius:7px;color:#d8e0f2;font-size:12px;padding:8px}
 .focus-toggle{color:#ded5ff!important;border-color:#6555b7!important}
+.source-editor{padding:0;overflow:hidden}
+.source-editor .cm-editor{height:100%;background:#101722;color:#cbd9f2;font:13px/23px 'SFMono-Regular',Consolas,'Liberation Mono',monospace}
+.source-editor .cm-scroller{overflow:auto;font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace}
+.source-editor .cm-content{padding:20px 12px;caret-color:#dfd6ff}
+.source-editor .cm-line{padding:0}
+.source-editor .cm-gutters{background:#101722;color:#526078;border:0;padding:20px 6px 0 0}
+.source-editor .cm-activeLine,.source-editor .cm-activeLineGutter{background:#192238}
+.source-editor .cm-cursor{border-left-color:#dfd6ff}
+.source-editor .cm-selectionBackground{background:#4b4c83!important}
+.source-editor .cm-inline-ghost{color:#8190aa;opacity:.7;white-space:pre;pointer-events:none}
+.source-editor .cm-tooltip-autocomplete{background:#1a263a;color:#e5eaf5;border:1px solid #44516c;border-radius:7px;overflow:hidden}
+.source-editor .cm-tooltip-autocomplete ul li[aria-selected]{background:#394875;color:#fff}
 @media(max-width:720px){
   .focus-mode .workbench{flex-direction:row;overflow:hidden}
   .focus-mode .editor-workspace,.focus-mode .preview-pane{min-height:0;border-top:0}

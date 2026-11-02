@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BookOpen, Bot, Check, ChevronDown, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, Play, Sparkles, Terminal, Upload, X } from 'lucide-react';
+import LatexEditor from './LatexEditor';
 
 type ProjectSummary = { id: string; name: string; updatedAt: string; hasPdf: boolean };
 type Project = ProjectSummary & { latex: string };
@@ -27,6 +28,7 @@ export default function App() {
   const [aiReply, setAiReply] = useState<AiReply | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [compiling, setCompiling] = useState(false);
+  const [creating, setCreating] = useState(false);
   const revision = useRef(0);
   const compilingRef = useRef(false);
   const latestEditRef = useRef({ id: '', source: '', name: '' });
@@ -43,6 +45,11 @@ export default function App() {
     }
     return response;
   }, [token]);
+  const requestCompletion = useCallback(async (prefix: string, suffix: string, signal: AbortSignal) => {
+    const response = await api('/api/complete', { method: 'POST', signal, body: JSON.stringify({ provider, prefix, suffix }) });
+    const result = await response.json() as { text: string };
+    return result.text;
+  }, [api, provider]);
   const listProjects = useCallback(async () => {
     const result = await api('/api/projects');
     const entries = await result.json() as ProjectSummary[];
@@ -100,14 +107,18 @@ export default function App() {
     }).catch(e => setStatus((e as Error).message));
   }, [token, listProjects, openProject]);
   const createProject = async () => {
+    if (creating) return;
+    const name = window.prompt('New LaTeX project name', 'Untitled Project');
+    if (name === null) return;
+    setCreating(true);
+    setStatus('Creating project…');
     try {
-      const name = window.prompt('New LaTeX project name', 'Untitled Project');
-      if (name === null) return;
       const res = await api('/api/projects', { method: 'POST', body: JSON.stringify({ name }) });
       const next = await res.json() as Project;
       await listProjects();
       await openProject(next.id);
     } catch (e) { setStatus((e as Error).message); }
+    finally { setCreating(false); }
   };
   const save = useCallback(async (id: string, source: string, name: string, editRevision: number) => {
     const res = await api(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify({ latex: source, name }) });
@@ -190,17 +201,6 @@ export default function App() {
     if (file.size > 200_000) { setStatus('Source is too large'); return; }
     edit(await file.text());
   };
-  const handleKeys = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (project) void save(project.id, latex, projectName, revision.current); }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (project) void compile(project.id, latex, projectName, revision.current); }
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const el = e.currentTarget;
-      const { selectionStart: start, selectionEnd: end } = el;
-      edit(latex.slice(0, start) + '  ' + latex.slice(end));
-      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; });
-    }
-  };
   return <div className={`shell${focusMode ? ' focus-mode' : ''}${sidebarOpen ? ' sidebar-open' : ''}`}>
     <header className="topbar">
       <div className="logo"><span className="brand-symbol">P</span><div><strong>Patex</strong><small>SL Labs / LaTeX Studio</small></div></div>
@@ -209,7 +209,7 @@ export default function App() {
         <span className={`status ${status.includes('failed') || status.includes('errors') ? 'bad' : ''}`}>{compiling && <LoaderCircle className="spin" size={14}/>} {status}</span>
         <button className="light project-panel-toggle" aria-label={sidebarOpen ? 'Hide project sidebar' : 'Show project sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(x => !x)}>{sidebarOpen ? <PanelLeftClose size={15}/> : <PanelLeftOpen size={15}/>}<span>Projects</span></button>
         {focusMode && <select className="project-switcher" aria-label="Switch project" value={project?.id || ''} onChange={e => { if (e.target.value) void openProject(e.target.value); }}><option value="">Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
-        <button className="light" onClick={() => void createProject()} title="New project"><FilePlus size={16}/> New</button>
+        <button className="light" onClick={() => void createProject()} disabled={creating} title="New project"><FilePlus size={16}/> New</button>
         <button className="light" onClick={downloadText} disabled={!project} title="Export .tex"><Code2 size={16}/> .tex</button>
         <button className="light" onClick={() => void downloadPdf()} disabled={!project || !pdfUrl} title="Download PDF"><Download size={16}/> PDF</button>
         <button className="primary" onClick={() => project && void compile(project.id, latex, projectName, revision.current)} disabled={!project || compiling}><Play size={15} fill="currentColor"/> Compile</button>
@@ -219,8 +219,8 @@ export default function App() {
     </header>
     <div className="workbench">
       <aside className="sidebar">
-        <div className="sidebar-heading"><strong>WORKSPACE</strong><button className="icon-button" title="New project" onClick={() => void createProject()}><FilePlus size={18}/></button></div>
-        <button className="new-project" onClick={() => void createProject()}><FilePlus size={16}/> New project</button>
+        <div className="sidebar-heading"><strong>WORKSPACE</strong><button className="icon-button" title="New project" disabled={creating} onClick={() => void createProject()}><FilePlus size={18}/></button></div>
+        <button className="new-project" disabled={creating} onClick={() => void createProject()}><FilePlus size={16}/> New project</button>
         <div className="nav-header"><BookOpen size={13}/> PROJECTS</div>
         {projects.map(p => <button key={p.id} className={`project-item ${p.id === project?.id ? 'selected' : ''}`} onClick={() => { void openProject(p.id); if (focusMode) setSidebarOpen(false); }}><FileText size={16}/><span>{p.name}</span></button>)}
         {projects.length === 0 && <p className="empty-sidebar">Create a project to begin writing.</p>}
@@ -228,9 +228,9 @@ export default function App() {
       </aside>
       <main className="editor-workspace">
         <div className="pane-head"><span><Code2 size={16}/> LATEX SOURCE</span><div><button className="text-button" onClick={() => fileInput.current?.click()} disabled={!project}><Upload size={15}/> Import .tex</button><input ref={fileInput} hidden type="file" accept=".tex,text/plain" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadTex(f); e.currentTarget.value = ''; }}/><span className="tab-label">main.tex <ChevronDown size={12}/></span></div></div>
-        {project ? <div className="editor-wrapper"><div className="line-rail">{Array.from({ length: Math.max(29, latex.split('\n').length) }, (_, i) => <div key={i}>{i + 1}</div>)}</div><textarea className="source-editor" aria-label="LaTeX source editor" value={latex} onChange={e => edit(e.target.value)} onKeyDown={handleKeys} spellCheck={false} /></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
+        {creating ? <div className="placeholder" role="status"><LoaderCircle className="spin" size={32}/><h2>Creating project…</h2></div> : project ? <div className="editor-wrapper"><LatexEditor key={project.id} value={latex} onChange={edit} onSave={() => { void save(project.id, latex, projectName, revision.current); }} onCompile={() => { void compile(project.id, latex, projectName, revision.current); }} requestCompletion={requestCompletion}/></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
         {showDiagnostics && <div className="diagnostics"><div className="diagnostics-head"><Terminal size={14}/> COMPILE OUTPUT <button onClick={() => setShowDiagnostics(false)} aria-label="Close compile output"><X size={15}/></button></div><pre>{diagnostics || 'No output yet'}</pre></div>}
-        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>⌘ ↵ compile</span></div>
+        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><span>Tab accepts inline suggestions</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>⌘ ↵ compile</span></div>
       </main>
       <section className="preview-pane"><div className="pane-head"><span><FileText size={16}/> PDF PREVIEW</span><span className="preview-pill"><span className={pdfUrl ? 'dot ready' : 'dot'}/> {pdfUrl ? 'Last successful build' : 'Not compiled'}</span></div><div className="preview-body">{pdfUrl ? <iframe key={pdfUrl} title="PDF preview" src={pdfUrl}/> : <div className="placeholder paper"><FileText size={45}/><h2>Live document preview</h2><p>Your compiled PDF will appear here.</p><span>Press Compile or edit the source to start.</span></div>}</div><div className="preview-footer"><span>PDF preview · Auto-refresh after edits</span>{pdfUrl && <Check size={14}/>}</div></section>
       {aiOpen && <aside className="assistant"><div className="assistant-head"><div><Sparkles size={19}/><strong>Writing assistant</strong></div><button className="icon-button" aria-label="Close assistant" onClick={() => setAiOpen(false)}><PanelRightClose size={18}/></button></div><div className="assistant-intro"><Bot size={27}/><h3>Write better, together.</h3><p>Ask an AI to explain equations, repair LaTeX, or rewrite sections. Suggestions are never applied without your approval.</p></div><label className="field-label" htmlFor="provider">MODEL PROVIDER</label><select id="provider" value={provider} onChange={e => setProvider(e.target.value as Provider)}><option value="llamafarm">LlamaFarm (local)</option><option value="anthropic">Claude API</option><option value="openai">OpenAI API</option></select><div className="assistant-history" aria-live="polite">{aiReply ? <><div className="reply">{aiReply.text}</div>{aiReply.suggestedLatex && <button className="apply-suggestion" onClick={() => { edit(aiReply.suggestedLatex!); setAiReply(null); }}><Check size={15}/> Apply suggested LaTeX</button>}</> : <p>Try: “Fix any LaTeX errors and explain your changes.”</p>}</div><div className="prompt-area"><textarea aria-label="Message to AI assistant" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Ask about this document…" rows={4}/><button className="primary" onClick={() => void askAssistant()} disabled={!project || aiBusy || !prompt.trim()}>{aiBusy ? <LoaderCircle size={15} className="spin"/> : <Sparkles size={15}/>} {aiBusy ? 'Thinking…' : 'Ask assistant'}</button><small>Requires configured provider API or LlamaFarm endpoint.</small></div></aside>}
