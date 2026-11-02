@@ -37,7 +37,7 @@ The computed mean is `r sample_mean`, and its standard error is
 R variables.
 
 The Python and Node chunks below also run in this document build. The Node
-chunk uses a simple TypeScript type annotation supported by the pinned Node
+chunk uses a simple TypeScript type annotation supported by the Node 22
 runtime; it is not a general TypeScript project build.
 
 ```{python, echo=TRUE}

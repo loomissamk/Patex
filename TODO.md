@@ -12,15 +12,17 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 - [x] Add opt-in local accepted/rejected AI feedback records with export and deletion APIs; no model-training transfer.
 - [x] Verify browser creation/edit/preview and feedback controls against the staging app; confirm Rmd citation text in the generated PDF.
 - [x] Deploy through Nginx; verify live Rmd and Qmd computed PDF text, resolve an Rmd citation, and preserve the existing homework PDF byte for byte.
+- [x] Compile an existing single-file matrix homework unchanged; compile a substantial statistics homework after embedding its external R helper in a copy. Render a standalone mixed R/Python/typed Node/math/plot/citation example in staging and inspect its PDF text.
 
 ### 1. Document-first authoring
 
 - [ ] Keep existing `main.tex` projects working unchanged. Add `main.Rmd`/`main.qmd` documents as first-class project sources; import the user's existing files without silently rewriting them.
 - [ ] Render R/R Markdown code chunks, inline values, LaTeX math, raw LaTeX results, plots, tables, and prose in source order. Start with a real Stats Methods Rmd fixture modeled on the existing homework workflow.
 - [ ] Detect inline-only Qmd engine requirements and either choose the correct engine from its inline language or show a clear build diagnostic. Quarto currently leaves an R inline expression literal when the document has neither a code cell nor explicit `engine: knitr`.
-- [ ] Add Python chunks to the same literate document using a documented engine and reproducible environment; add TypeScript chunks with a controlled Node runner. Preserve state within each language during one build and exchange data through explicit files/artifacts.
+- [ ] Make the tested Python and Node chunks a reliable product feature: pin the exact runtimes, test repeated chunks and shared state, support a complete TypeScript toolchain, and provide an explicit path for sharing data across languages.
 - [ ] Keep the source/PDF split at 50/50 by default. Build after a short typing pause, cancel or supersede stale builds, keep the last good PDF, preserve preview position, and show errors at their source lines. Long code cells need an explicit run control and cache/freeze options.
 - [ ] Allow a project to contain supporting source, images, data, and generated artifacts without making separate script tabs the primary writing flow.
+- [ ] Import an existing multi-file Rmd project with sourced R helpers, data, and its declared packages. The current compiler cannot render such a project unchanged from a single source upload.
 
 ### 2. Publishing essentials
 

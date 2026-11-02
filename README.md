@@ -11,7 +11,7 @@ The browser editor works on macOS, Windows, and Linux. Its Ctrl/Cmd shortcuts us
 - CodeMirror LaTeX editor with command completion and AI text suggested at the cursor; Tab accepts and Escape dismisses
 - Creates, names and persists native TeX, R Markdown, and Quarto projects in a Docker volume
 - Debounced autosave and auto-compile after edits; manual **Compile** (Ctrl/Cmd+Enter)
-- Rmd/Qmd documents keep prose, LaTeX math, executable R chunks, inline results, and plots in one source file
+- Rmd/Qmd documents keep prose, LaTeX math, executable R chunks, inline results, and plots in one source file; Rmd can also run Python and Node chunks
 - `references.bib` editor; BibTeX citations in native TeX and bibliography metadata in Rmd/Qmd PDF builds
 - Shows LaTeX compile errors and keeps the last successful PDF visible
 - Download `.tex` or generated `.pdf`; import `.tex` into a project
@@ -86,7 +86,9 @@ The stdio server runs inside the app container so it shares project storage. The
 
 Choose **R Markdown** or **Quarto** when creating a document. The left pane holds one `main.Rmd` or `main.qmd`; R chunks and inline R values are rendered with the surrounding mathematics and prose when the PDF rebuilds. Import an existing file of the same type or download the source. The project also has a `references.bib` tab. Add BibTeX entries there and cite them with `[@key]` in Rmd/Qmd. For native `main.tex`, use `\cite{key}`, `\bibliographystyle{plain}`, and `\bibliography{references}`.
 
-The current literate renderer supports R code in the document. Python and TypeScript chunks inside the same document, supporting files such as a sourced R helper, dependency lockfiles, and clean source-bundle export are next steps in [TODO.md](TODO.md). Existing TeX projects continue to use the native TeX compiler.
+The tested [one-file example](examples/one-file-math-stats.Rmd) combines equations, R calculations, Python, a Node chunk with a simple TypeScript annotation, a plot, and an inline YAML citation. Its [rendered PDF](examples/one-file-math-stats.pdf) shows the result. Python uses knitr/reticulate and the compiler's Debian Python; the Node chunk supports only syntax accepted by Node 22 and is not a full TypeScript build. Existing TeX projects continue to use the native TeX compiler.
+
+An existing Rmd that calls `source("R/utils.R")`, loads unavailable R packages, or reads external data is still a multi-file project. Patex currently cannot upload those dependencies or install per-project packages. A self-contained copy can put the helper in a setup chunk; broader project-file and dependency support remain in [TODO.md](TODO.md).
 
 ## Supporting scripts in native TeX projects
 
