@@ -8,42 +8,6 @@ import type { Artifact, CompileResult, DocumentFormat } from '../shared/types.js
 
 const execFileAsync = promisify(execFile);
 
-// Quarto's default Markdown reader does not treat legacy R Markdown \(...\)
-// and \[...\] as math. Change only the temporary render copy, never the
-// project source, and leave fenced code and TeX row spacing (\\[6pt]) alone.
-export function normalizeRmdMath(source: string): string {
-  let fence: { marker: string; length: number } | undefined;
-  return source.replace(/\r\n/g, '\n').split('\n').map(line => {
-    const boundary = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (fence) {
-      if (boundary && boundary[1][0] === fence.marker && boundary[1].length >= fence.length) fence = undefined;
-      return line;
-    }
-    if (boundary) { fence = { marker: boundary[1][0], length: boundary[1].length }; return line; }
-    if (/^\s*\\\[\s*$/.test(line)) return line.replace('\\[', () => '$$');
-    if (/^\s*\\\]\s*$/.test(line)) return line.replace('\\]', () => '$$');
-    let output = '';
-    let ticks = 0;
-    for (let i = 0; i < line.length;) {
-      if (line[i] === '`') {
-        let end = i + 1;
-        while (line[end] === '`') end++;
-        const count = end - i;
-        ticks = ticks === 0 ? count : ticks === count ? 0 : ticks;
-        output += line.slice(i, end);
-        i = end;
-      } else if (ticks === 0 && line.startsWith('\\(', i)) {
-        const end = line.indexOf('\\)', i + 2);
-        if (end > i && !line.slice(i + 2, end).includes('`')) {
-          output += `$${line.slice(i + 2, end)}$`;
-          i = end + 2;
-        } else { output += line[i]; i++; }
-      } else { output += line[i]; i++; }
-    }
-    return output;
-  }).join('\n');
-}
-
 export function attachBibliography(source: string, bibliography: string): string {
   if (!bibliography) return source;
   const normalized = source.replace(/\r\n/g, '\n');
@@ -62,8 +26,7 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
   const workdir = await mkdtemp(path.join(tmpdir(), 'patex-document-'));
   try {
     const filename = format === 'rmd' ? 'main.Rmd' : 'main.qmd';
-    const renderSource = format === 'rmd' ? normalizeRmdMath(source) : source;
-    await writeFile(path.join(workdir, filename), attachBibliography(renderSource, bibliography), { mode: 0o600 });
+    await writeFile(path.join(workdir, filename), attachBibliography(source, bibliography), { mode: 0o600 });
     if (bibliography) await writeFile(path.join(workdir, 'references.bib'), bibliography, { mode: 0o600 });
     await mkdir(path.join(workdir, 'assets'), { mode: 0o700 });
     let total = 0;
@@ -75,15 +38,20 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
       await writeFile(path.join(workdir, 'assets', asset.name), bytes, { mode: 0o600 });
     }
     try {
-      const args = [
+      const quartoArgs = [
         'render', filename, '--to', 'pdf', '--output', 'main.pdf', '--no-cache',
         '-M', 'pdf-engine:pdflatex', '-M', 'latex-auto-install:false',
       ];
-      const { stdout, stderr } = await execFileAsync('quarto', args, {
+      const command = format === 'rmd' ? 'Rscript' : 'quarto';
+      const args = format === 'rmd'
+        ? ['-e', 'rmarkdown::render("main.Rmd", output_file="main.pdf", quiet=TRUE)']
+        : quartoArgs;
+      const { stdout, stderr } = await execFileAsync(command, args, {
         cwd: workdir, timeout: 120_000, maxBuffer: 1024 * 1024,
         env: {
           PATH: '/opt/quarto/bin:/usr/local/bin:/usr/bin:/bin', HOME: workdir, TMPDIR: workdir,
-          LANG: 'C.UTF-8', R_LIBS_USER: workdir, RETICULATE_PYTHON: '/usr/bin/python3', QUARTO_DISABLE_VERSION_CHECK: '1',
+          LANG: 'C.UTF-8', R_LIBS_USER: workdir, RETICULATE_PYTHON: '/usr/bin/python3',
+          RSTUDIO_PANDOC: '/opt/quarto/bin/tools', QUARTO_DISABLE_VERSION_CHECK: '1',
         },
       });
       const pdf = await readFile(path.join(workdir, 'main.pdf'));

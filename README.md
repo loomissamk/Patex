@@ -43,7 +43,7 @@ A generic Nginx example is in `infra/nginx-patex.conf.example`. The actual priva
 
 ## Local development
 
-Node 22+ required. Install LaTeX (`pdflatex`) to compile native TeX locally, and install Python 3 or R to run those languages without Docker. Local Rmd/Qmd rendering also requires Quarto and R packages. The Docker compiler image pins Quarto and includes R Markdown/knitr.
+Node 22+ required. Install LaTeX (`pdflatex`) to compile native TeX locally, and install Python 3 or R to run those languages without Docker. Local Rmd rendering requires R Markdown and Pandoc; Qmd rendering requires Quarto. The Docker compiler image includes both R Markdown/knitr and pinned Quarto.
 
 ```bash
 npm install --no-audit --no-fund
@@ -90,7 +90,7 @@ The tested [one-file example](examples/one-file-math-stats.Rmd) combines equatio
 
 An existing Rmd that calls `source("R/utils.R")`, loads unavailable R packages, or reads external data is still a multi-file project. Patex currently cannot upload those dependencies or install per-project packages. A self-contained copy can put the helper in a setup chunk; broader project-file and dependency support remain in [TODO.md](TODO.md).
 
-For older Rmd documents, the compiler recognizes `\(...\)` and standalone `\[...\]` math delimiters in a temporary render copy. The saved source stays exactly as written; fenced code and TeX line spacing such as `\\[6pt]` are left alone.
+`.Rmd` projects use the native R Markdown renderer so legacy `\(...\)` and `\[...\]` math and existing `pdf_document` options retain their intended layout. `.qmd` projects use Quarto. The saved source stays exactly as written.
 
 ## Supporting scripts in native TeX projects
 
@@ -116,7 +116,7 @@ Compiler container: nonroot Node + Python 3 + R + pinned Quarto + pdflatex (CPU 
 
 ## Safety and limitations
 
-- Compiler rejects sources over 200 KB and PDFs over 5 MB, uses temporary working directories, and disables TeX `shell-escape` for native TeX. Script execution has time/output/artifact limits. The container is non-root, read-only, and resource limited. Quarto executes document code in this same container, which still shares an internal network with the app. **Do not offer this runner to untrusted public users** without stronger per-run network and filesystem isolation, process limits, rate limits, and a security review.
+- Compiler rejects sources over 200 KB and PDFs over 5 MB, uses temporary working directories, and disables TeX `shell-escape` for native TeX. Script execution has time/output/artifact limits. The container is non-root, read-only, and resource limited. R Markdown and Quarto execute document code in this same container, which still shares an internal network with the app. **Do not offer this runner to untrusted public users** without stronger per-run network and filesystem isolation, process limits, rate limits, and a security review.
 - PDF compilation supports one main document, a `references.bib`, and generated artifacts. Arbitrary multi-file projects, uploaded images, datasets, Biber, and full source-bundle export are still out of scope for this beta.
 - PDF preview uses browser-native embedding, not full PDF.js annotation tools.
 - Runtime/package expansion and a future subscription release are tracked in [TODO.md](TODO.md) and [ROADMAP.md](ROADMAP.md).
