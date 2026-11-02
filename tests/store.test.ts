@@ -55,6 +55,13 @@ describe('ProjectStore', () => {
     await store.updateBibliography(project.id, bib);
     expect((await store.get(project.id)).bibliography).toBe(bib);
   });
+  test('serializes simultaneous source and bibliography edits across store instances', async () => {
+    const project = await store.create('Concurrent edits');
+    const another = new ProjectStore(root);
+    await Promise.all([store.update(project.id, { latex: 'new source' }), another.updateBibliography(project.id, '@book{key, title={New}}')]);
+    expect((await store.get(project.id)).latex).toBe('new source');
+    expect((await store.get(project.id)).bibliography).toContain('@book{key');
+  });
   test('keeps AI feedback opt-in and exportable', async () => {
     const project = await store.create('Private paper');
     const input = { provider: 'llamafarm' as const, decision: 'accepted' as const, sourceBefore: 'old', suggestion: 'new', sourceAfter: 'new' };

@@ -6,6 +6,7 @@ import type { ScriptLanguage } from '../shared/types.js';
 const app = express();
 app.use(express.json({ limit: '96mb' }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.post('/status', (_req, res) => res.json({ ok: true, image: 'development', isolated: false }));
 app.post('/compile', async (req, res) => {
   try {
     if (typeof req.body?.latex !== 'string') { res.status(400).json({ error: 'latex is required' }); return; }

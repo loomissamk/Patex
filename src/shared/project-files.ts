@@ -21,7 +21,7 @@ export function decodedFiles(files: ProjectFile[]): { name: string; data: Buffer
   if (!Array.isArray(files) || files.length > projectLimits.files) throw new Error('Project file count exceeds 500');
   let total = 0;
   const names = new Set<string>();
-  return files.map(file => {
+  const decoded = files.map(file => {
     const name = projectPath(file?.name);
     const key = name.toLowerCase();
     if (names.has(key)) throw new Error('Duplicate project file path');
@@ -32,6 +32,11 @@ export function decodedFiles(files: ProjectFile[]): { name: string; data: Buffer
     if (data.toString('base64') !== file.base64 || data.length > projectLimits.fileBytes || total > projectLimits.totalBytes) throw new Error('Project file size limit exceeded');
     return { name, data };
   });
+  for (const file of decoded) {
+    const pieces = file.name.toLowerCase().split('/');
+    for (let length = 1; length < pieces.length; length++) if (names.has(pieces.slice(0, length).join('/'))) throw new Error('Project file conflicts with a directory');
+  }
+  return decoded;
 }
 export async function materializeFiles(root: string, files: ProjectFile[]): Promise<void> {
   for (const { name, data } of decodedFiles(files)) {

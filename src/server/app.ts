@@ -297,9 +297,11 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
   });
   app.use('/api', ((_err, _req, res, _next) => {
     const e = _err as NodeJS.ErrnoException;
-    if (e.code === 'ENOENT' || e.message === 'Invalid project ID') res.status(404).json({ error: 'Project or artifact not found' });
+    if ((e as NodeJS.ErrnoException & { type?: string }).type === 'entity.too.large') res.status(413).json({ error: 'Upload exceeds the size limit' });
+    else if (e.code === 'ENOENT' || e.message === 'Invalid project ID') res.status(404).json({ error: 'Project or artifact not found' });
     else if (e.message === 'Feedback capture is off') res.status(403).json({ error: e.message });
-    else if (/Invalid|limit|exceeds|exceeded|Choose|Select|ZIP|Archive|archive|Duplicate|Manifest|missing main|Cannot remove|Update the main/.test(e.message)) res.status(400).json({ error: e.message });
+    else if (/Invalid|limit|exceeds|exceeded|Choose|Select|ZIP|Archive|archive|Duplicate|Manifest|missing main|Cannot remove|Update the main|Use a |Username|Account unavailable|conflicts/.test(e.message)) res.status(400).json({ error: e.message });
+    else if (e.name === 'TimeoutError') res.status(503).json({ error: 'Provider or build timed out. Try again shortly.' });
     else if (/superseded|Source changed/.test(e.message) || e.name === 'AbortError') res.status(409).json({ error: 'Build cancelled or superseded by a newer revision' });
     else res.status(500).json({ error: e.message.startsWith('Provider') || e.message.includes('configured') ? e.message : 'Internal error' });
   }) satisfies ErrorRequestHandler);

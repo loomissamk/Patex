@@ -3,15 +3,28 @@ import { mkdir, readFile, readdir, rename, writeFile, stat, unlink, rm } from 'n
 import path from 'node:path';
 import { defaultLatex, defaultQmd, defaultRmd } from '../shared/template.js';
 import { defaultScripts } from '../shared/scripts.js';
+import { scriptFiles } from '../shared/scripts.js';
 import { artifactName } from '../shared/artifacts.js';
 import { decodedFiles, formatForFile, mainFileFor, materializeFiles, projectLimits, projectPath } from '../shared/project-files.js';
 import type { Artifact, ArtifactSummary, Diagnostic, DocumentFormat, FeedbackEvent, Project, ProjectFile, ProjectFileSummary, ProjectSummary, RevisionSummary, ScriptLanguage } from '../shared/types.js';
 
 const validId = /^[0-9a-f-]{36}$/;
 interface StoredRevision { id: string; at: string; project: Project; files: { name: string; hash: string }[]; fingerprint: string }
-export interface StoredBuild { hash: string; log: string; diagnostics?: Diagnostic[]; synctexBase64?: string; sourceRoot?: string }
+export interface StoredBuild { hash: string; log: string; diagnostics?: Diagnostic[]; synctexBase64?: string; sourceRoot?: string; runtime?: { image: string } }
+const mutationLocks = new Map<string, Promise<unknown>>();
 export class ProjectStore {
-  constructor(private readonly root: string) {}
+  constructor(private readonly root: string) {
+    for (const method of ['create', 'importProject', 'update', 'updateBibliography', 'updateScript', 'setFeedbackEnabled', 'recordFeedback', 'deleteFeedback', 'saveFiles', 'removeFile', 'restore', 'saveArtifacts', 'deleteArtifact', 'checkpoint', 'buildInput', 'exportFiles'] as const) {
+      const original = this[method] as unknown as (...args: unknown[]) => Promise<unknown>;
+      Object.defineProperty(this, method, { value: (...args: unknown[]) => {
+        const key = `${this.root}/${method === 'create' || method === 'importProject' ? '_create' : String(args[0])}`;
+        const previous = mutationLocks.get(key) || Promise.resolve();
+        const task = previous.catch(() => {}).then(() => original.apply(this, args));
+        mutationLocks.set(key, task);
+        return task.finally(() => { if (mutationLocks.get(key) === task) mutationLocks.delete(key); });
+      } });
+    }
+  }
   get dataRoot(): string { return this.root; }
   workspace(id: string): ProjectStore { if (!validId.test(id)) throw new Error('Invalid workspace'); return new ProjectStore(path.join(this.root, '_workspaces', id)); }
   private projectDir(id: string): string {
@@ -65,7 +78,7 @@ export class ProjectStore {
     const dir = this.projectDir(p.id);
     const filename = path.join(dir, 'project.json');
     const previous = await this.get(p.id).catch(() => null);
-    if (snapshot && previous && JSON.stringify({ ...previous, updatedAt: '', hasPdf: false }) !== JSON.stringify({ ...p, updatedAt: '', hasPdf: false })) await this.checkpoint(p.id, previous);
+    if (snapshot && previous && JSON.stringify({ ...previous, updatedAt: '', hasPdf: false }) !== JSON.stringify({ ...p, updatedAt: '', hasPdf: false })) await this.snapshot(p.id, previous);
     const temp = path.join(dir, `.project-${randomUUID()}.tmp`);
     await writeFile(temp, JSON.stringify(p, null, 2), { mode: 0o600 });
     await rename(temp, filename);
@@ -93,14 +106,18 @@ export class ProjectStore {
     const decoded = decodedFiles(files);
     mainFile = projectPath(mainFile);
     const main = decoded.find(file => file.name === mainFile);
-    if (!main || main.data.length > projectLimits.sourceBytes || main.data.includes(0)) throw new Error('Invalid or missing main document');
-    const project = await this.create(name, formatForFile(mainFile));
+    if (!main || main.data.length > projectLimits.sourceBytes || main.data.includes(0) || !Buffer.from(main.data.toString('utf8')).equals(main.data)) throw new Error('Invalid or missing UTF-8 main document');
+    if ((await this.list()).length + (await this.list(true)).length >= 50) throw new Error('Workspace project limit reached (50)');
+    const id = randomUUID(); const stage = path.join(this.root, `.import-${id}`);
     const bibPath = path.posix.join(path.posix.dirname(mainFile), 'references.bib');
     const bibliography = decoded.find(file => file.name === bibPath)?.data.toString('utf8') || '';
-    await materializeFiles(path.join(this.projectDir(project.id), 'files'), files.filter(file => file.name !== mainFile && file.name !== bibPath));
-    const imported = { ...project, mainFile, latex: main.data.toString('utf8'), bibliography };
-    await this.put(imported, false);
-    return imported;
+    const imported: Project = { id, name: name.trim().slice(0, 100) || 'Imported project', mainFile, format: formatForFile(mainFile), engine: 'pdflatex', latex: main.data.toString('utf8'), bibliography, scripts: { ...defaultScripts }, feedbackEnabled: false, hasPdf: false, updatedAt: new Date().toISOString() };
+    try {
+      await mkdir(stage, { recursive: true, mode: 0o700 });
+      await materializeFiles(path.join(stage, 'files'), files.filter(file => file.name !== mainFile && file.name !== bibPath));
+      await writeFile(path.join(stage, 'project.json'), JSON.stringify(imported, null, 2), { mode: 0o600 });
+      await rename(stage, this.projectDir(id)); return imported;
+    } catch (error) { await rm(stage, { recursive: true, force: true }); throw error; }
   }
   private async diskFiles(id: string): Promise<ProjectFile[]> {
     const root = path.join(this.projectDir(id), 'files');
@@ -127,6 +144,7 @@ export class ProjectStore {
     decodedFiles(files);
     return files;
   }
+  async buildInput(id: string): Promise<{ project: Project; files: ProjectFile[] }> { return { project: await this.get(id), files: await this.compileFiles(id) }; }
   async listFiles(id: string): Promise<ProjectFileSummary[]> {
     return (await this.compileFiles(id)).map(file => ({ name: file.name, size: Buffer.byteLength(file.base64, 'base64'), text: /\.(?:tex|latex|rmd|qmd|bib|r|py|js|ts|json|csv|tsv|txt|md|yml|yaml|cls|sty|bst|lock|Rprofile)$/i.test(file.name) || /(?:^|\/)\.here$/.test(file.name) }));
   }
@@ -145,7 +163,7 @@ export class ProjectStore {
       merged.set(file.name, file);
     }
     decodedFiles([...merged.values()]);
-    await this.checkpoint(id);
+    await this.snapshot(id);
     await materializeFiles(path.join(this.projectDir(id), 'files'), files);
     await this.put({ ...project, updatedAt: new Date().toISOString() });
   }
@@ -153,15 +171,16 @@ export class ProjectStore {
     projectPath(name);
     const project = await this.get(id);
     if (name === project.mainFile) throw new Error('Cannot remove the main document');
-    await this.checkpoint(id);
+    await this.snapshot(id);
     await unlink(path.join(this.projectDir(id), 'files', ...name.split('/')));
     await this.put({ ...project, updatedAt: new Date().toISOString() });
   }
   async exportFiles(id: string): Promise<ProjectFile[]> {
     const project = await this.get(id);
     const files = await this.compileFiles(id);
+    for (const language of ['javascript', 'python', 'r'] as const) if (!files.some(file => file.name === scriptFiles[language])) files.push({ name: scriptFiles[language], base64: Buffer.from(project.scripts[language]).toString('base64') });
     if (project.format === 'rmd' && !files.some(file => file.name === '.here')) files.push({ name: '.here', base64: '' });
-    const manifest = { version: 1, name: project.name, mainFile: project.mainFile, format: project.format, engine: project.engine, renderer: project.format === 'rmd' ? 'rmarkdown' : project.format === 'qmd' ? 'quarto' : 'latexmk', files: files.map(file => ({ name: file.name, sha256: createHash('sha256').update(Buffer.from(file.base64, 'base64')).digest('hex') })) };
+    const manifest = { version: 1, name: project.name, mainFile: project.mainFile, format: project.format, engine: project.engine, runtime: (await this.readBuild(id))?.runtime, renderer: project.format === 'rmd' ? 'rmarkdown' : project.format === 'qmd' ? 'quarto' : 'latexmk', files: files.map(file => ({ name: file.name, sha256: createHash('sha256').update(Buffer.from(file.base64, 'base64')).digest('hex') })) };
     const build = `# Build ${project.name}\n\nMain source: ${project.mainFile}\n\nRun from this project root using the Patex compiler image, or install R Markdown/reticulate, Quarto, Node 22 and TeX Live as appropriate. Imported renv.lock, requirements.txt and package-lock.json files describe project dependencies; package installation is an explicit step before a build.\n\n` + (project.format === 'rmd' ? `Rscript -e 'rmarkdown::render(${JSON.stringify(project.mainFile)}, output_format="pdf_document")'\n` : project.format === 'qmd' ? `quarto render ${JSON.stringify(project.mainFile)} --to pdf\n` : `latexmk -pdf ${JSON.stringify(project.mainFile)}\n`);
     files.push({ name: 'patex-manifest.json', base64: Buffer.from(JSON.stringify(manifest, null, 2)).toString('base64') });
     if (!files.some(file => file.name === 'PATEX-BUILD.md')) files.push({ name: 'PATEX-BUILD.md', base64: Buffer.from(build).toString('base64') });
@@ -174,10 +193,12 @@ export class ProjectStore {
     const revisions = await Promise.all(names.filter(name => name.endsWith('.json')).map(async name => JSON.parse(await readFile(path.join(dir, name), 'utf8')) as StoredRevision));
     return revisions.sort((a, b) => b.at.localeCompare(a.at)).map(({ id: revisionId, at, project }) => ({ id: revisionId, at, name: project.name }));
   }
-  async checkpoint(id: string, value?: Project): Promise<void> {
+  async checkpoint(id: string): Promise<void> { await this.snapshot(id); }
+  private async snapshot(id: string, value?: Project): Promise<void> {
     const project = value || await this.get(id);
     const dir = this.projectDir(id);
     const files = await this.diskFiles(id);
+    for (const asset of await this.compileAssets(id)) if (!files.some(file => file.name === `assets/${asset.name}`)) files.push({ ...asset, name: `assets/${asset.name}` });
     const refs = files.map(file => ({ name: file.name, hash: createHash('sha256').update(Buffer.from(file.base64, 'base64')).digest('hex') }));
     const fingerprint = createHash('sha256').update(JSON.stringify({ project: { ...project, updatedAt: '', hasPdf: false }, files: refs })).digest('hex');
     const existing = await this.revisions(id);
@@ -190,18 +211,25 @@ export class ProjectStore {
     await writeFile(path.join(dir, 'history', `${record.id}.json`), JSON.stringify(record), { mode: 0o600 });
     for (const old of existing.slice(39)) await unlink(path.join(dir, 'history', `${old.id}.json`));
     const retained = await this.revisions(id);
-    const referenced = new Set<string>();
-    for (const revision of retained) { const stored = JSON.parse(await readFile(path.join(dir, 'history', `${revision.id}.json`), 'utf8')) as StoredRevision; stored.files.forEach(file => referenced.add(file.hash)); }
+    const records = await Promise.all(retained.map(async revision => JSON.parse(await readFile(path.join(dir, 'history', `${revision.id}.json`), 'utf8')) as StoredRevision));
+    let referenced = new Set(records.flatMap(record => record.files.map(file => file.hash)));
+    let bytes = (await Promise.all([...referenced].map(hash => stat(path.join(dir, 'blobs', hash)).then(info => info.size)))).reduce((sum, size) => sum + size, 0);
+    while (bytes > 128 * 1024 * 1024 && records.length > 1) {
+      const oldest = records.pop()!; await unlink(path.join(dir, 'history', `${oldest.id}.json`));
+      referenced = new Set(records.flatMap(record => record.files.map(file => file.hash)));
+      bytes = (await Promise.all([...referenced].map(hash => stat(path.join(dir, 'blobs', hash)).then(info => info.size)))).reduce((sum, size) => sum + size, 0);
+    }
     for (const blob of await readdir(path.join(dir, 'blobs'))) if (!referenced.has(blob)) await unlink(path.join(dir, 'blobs', blob));
   }
   async restore(id: string, revisionId: string): Promise<Project> {
     if (!validId.test(revisionId)) throw new Error('Invalid revision ID');
     const dir = this.projectDir(id);
     const revision = JSON.parse(await readFile(path.join(dir, 'history', `${revisionId}.json`), 'utf8')) as StoredRevision;
-    await this.checkpoint(id);
     const files = await Promise.all(revision.files.map(async file => ({ name: file.name, base64: (await readFile(path.join(dir, 'blobs', file.hash))).toString('base64') })));
+    await this.snapshot(id);
     decodedFiles(files);
     await rm(path.join(dir, 'files'), { recursive: true, force: true });
+    await rm(this.artifactDir(id), { recursive: true, force: true });
     await materializeFiles(path.join(dir, 'files'), files);
     const restored = { ...revision.project, id, archived: false, updatedAt: new Date().toISOString() };
     await this.put(restored, false);
