@@ -9,7 +9,9 @@ services:
       PATEX_DATA_DIR: /data
       PATEX_ACCESS_TOKEN: ${PATEX_ACCESS_TOKEN:?Set PATEX_ACCESS_TOKEN in .env}
       PATEX_MCP_ALLOWED_HOSTS: ${PATEX_MCP_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      COMPILER_URL: http://compiler:3001
+      COMPILER_URL: unix:/worker/worker.sock
+      PATEX_COOKIE_SECURE: ${PATEX_COOKIE_SECURE:-false}
+      PATEX_PUBLIC_URL: ${PATEX_PUBLIC_URL:-http://patex.sl}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -19,10 +21,9 @@ services:
       LLAMAFARM_API_KEY: ${LLAMAFARM_API_KEY:-}
     volumes:
       - patex-data:/data
+      - ${PATEX_WORKER_DIR:?Run scripts/install-worker.sh and set PATEX_WORKER_DIR}:/worker:ro
     # Only localhost: let the separate Codex-managed Tailscale Nginx forward here.
     ports: ['127.0.0.1:4318:3000']
-    depends_on:
-      compiler: { condition: service_healthy }
     networks: [patex-internal, patex-outbound]
     extra_hosts: ['host.docker.internal:host-gateway']
     security_opt: [no-new-privileges:true]
@@ -33,6 +34,8 @@ services:
     mem_limit: 512m
     cpus: 1.0
   compiler:
+    profiles: [legacy]
+    image: patex-runner
     container_name: patex-compiler
     build: { context: ., dockerfile: infra/Dockerfile.compiler }
     restart: unless-stopped

@@ -73,6 +73,45 @@
 .feedback-toggle{display:flex;align-items:center;gap:8px;color:#c7d2e3;font-size:11px;line-height:1.4}
 .feedback-toggle input{accent-color:#8a76e7}
 .feedback-actions{display:flex;gap:8px}
+.sidebar{overflow:auto}
+.archive-toggle{display:flex;gap:7px;align-items:center;font-size:11px;color:#9eacc3;margin:8px}
+.project-tools{display:flex;flex-direction:column;gap:6px;margin-top:16px}
+.project-tools>button,.file-tree button,.file-upload-actions button{background:transparent;color:#b7c5dc;border:0;text-align:left;padding:7px 9px;border-radius:4px;font-size:11px}
+.project-tools button:hover,.file-tree button.selected{background:#26334a;color:white}
+.file-tree{max-height:38vh;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.file-tree button{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:30px;flex-shrink:0}
+.file-upload-actions{display:flex}
+.project-dialog{max-height:88vh;overflow:auto}
+.dialog-actions{display:flex;gap:8px;flex-wrap:wrap}
+.dialog-heading>button{background:none;border:0;color:#bcc9dc;font-size:22px}
+.login-screen{min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(at 30% 10%,#27325d,#0c111b 70%)}
+.login-screen h1{margin:0;font-size:28px}
+.secret-output{width:100%;min-height:90px;background:#0c1421;color:#d7e4fa;border:1px solid #526586;border-radius:6px;padding:10px;overflow-wrap:anywhere}
+.account-row{display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:12px}
+.history-entry{border:1px solid #394b65;border-radius:5px;padding:10px;background:#111a2a;color:#d4e0f5;display:flex;flex-direction:column;gap:5px;text-align:left}
+.history-dialog{width:min(540px,94vw)}
+.proposal-diff{white-space:pre-wrap;overflow-wrap:anywhere;max-height:45vh;overflow:auto;background:#0b1320;padding:10px;font:11px/1.6 Consolas,monospace}
+.proposal-diff span{display:block}
+.diff-added{background:#123d2e;color:#b0edce}.diff-removed{background:#49212c;color:#ffc1cb;text-decoration:line-through}.diff-context{color:#8290a7}
+.preview-body:has(.pdf-reader){display:flex;padding:0;overflow:hidden}
+.pdf-reader{height:100%;min-width:0;flex:1;display:flex;flex-direction:column}
+.pdf-toolbar{min-height:38px;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;background:#1c2739;border-bottom:1px solid #39475d;font-size:11px;color:#bccbe0;padding:4px}
+.pdf-toolbar button{background:#2c3a51;color:#dce6f5;border:0;border-radius:4px;padding:4px 8px}
+.pdf-toolbar input{width:44px;background:#121b2a;color:#dbe7f8;border:1px solid #40526e;border-radius:3px;padding:2px}
+.pdf-toolbar small{font-size:9px;color:#8da0bc}
+.pdf-scroll{flex:1;min-height:0;overflow:auto;padding:16px;background:#303b4f}
+.pdf-page{position:relative;width:max-content;margin:0 auto;background:white;box-shadow:0 2px 12px #0004}
+.pdf-page canvas{display:block}.pdf-page .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;text-align:initial;opacity:1;z-index:2;transform-origin:0 0}
+.workbench.resizing .pdf-reader{pointer-events:none}
+.math-library{position:absolute;right:0;top:64px;bottom:0;z-index:8;width:min(420px,94vw);display:flex;flex-direction:column;gap:12px;padding:16px;background:#142033;border-left:1px solid #42516d;box-shadow:-12px 0 25px #0005}
+.math-library>p{font-size:12px;line-height:1.5;color:#a6b6ce;margin:0}
+.math-library>input,.math-library>select{padding:10px;background:#0d1727;color:#deebff;border:1px solid #3d516e;border-radius:6px;width:100%;font-size:12px}
+.math-library-content{overflow:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px}
+.math-card{border:1px solid #354a68;background:#101a2b;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.math-card strong{font-size:13px}.math-card code{font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere;color:#a9bbd7}.math-card p,.math-howto p{font-size:11px;line-height:1.5;color:#a8bad3;margin:0}.math-card>div:last-child{display:flex;gap:8px}
+.formula-preview{background:#fff;color:#111;border-radius:5px;padding:5px 10px;overflow-x:auto;font-size:13px}.formula-preview .katex-display{margin:8px 0}
+.math-howto{padding:12px;background:#1b2940;border-radius:6px;font-size:12px}.math-howto>div{margin-top:12px}.math-library small{font-size:10px;color:#859bb9;line-height:1.5}
+.diagnostic-list{display:flex;flex-direction:column;gap:4px;max-height:125px;overflow:auto;padding:8px}.diagnostic-list button{text-align:left;border:0;background:#26334c;color:#d7deed;border-radius:3px;padding:5px;font-size:10px}
 @media(max-width:720px){
   .focus-mode .workbench{flex-direction:row;overflow:hidden}
   .focus-mode .editor-workspace,.focus-mode .preview-pane{min-height:0;border-top:0}
