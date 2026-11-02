@@ -21,4 +21,11 @@ describe('HTTP API', () => {
     await request(app).post('/api/projects').send({ name: 7 }).expect(400);
     await request(app).get('/api/projects/not-a-uuid').expect(404);
   });
+  test('MCP endpoint authenticates and lists Patex tools', async () => {
+    const app = createApp(new ProjectStore(root), { token: 'test-token' });
+    const payload = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
+    await request(app).post('/mcp').set('Host', 'localhost').set('Accept', 'application/json, text/event-stream').send(payload).expect(401);
+    const response = await request(app).post('/mcp').set('Host', 'localhost').set('Authorization', 'Bearer test-token').set('Accept', 'application/json, text/event-stream').send(payload).expect(200);
+    expect(response.text).toContain('patex_list_projects');
+  });
 });

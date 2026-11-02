@@ -11,7 +11,7 @@ A ready-to-extend **TypeScript/React + Node.js** LaTeX/PDF workspace. Edit sourc
 - Download `.tex` or generated `.pdf`; import `.tex` into a project
 - Ask LlamaFarm (OpenAI-compatible chat endpoint), Anthropic Claude API, or OpenAI API for LaTeX help
 - AI outputs are **suggestions**; explicit Apply button before source changes
-- MCP stdio tool server: list/get/create/update/compile projects for Claude Code and other MCP clients
+- MCP stdio and token-protected Streamable HTTP tools: list/get/create/update/compile projects for Claude Code, Codex and other MCP clients
 - Separate Debian slim compiler container with restricted permissions, no shell escape, resource limits
 - TypeScript strict checking, ESLint, Jest unit/integration tests, SonarQube configuration and GitHub Actions
 - Private local-only port `127.0.0.1:4318` intended for Codex-managed Nginx/Tailscale reverse proxy
@@ -54,7 +54,7 @@ Patex does not automatically inherit your ChatGPT/Claude web subscriptions or Ch
 - `ANTHROPIC_API_KEY` for Claude API; `ANTHROPIC_MODEL` chooses a model available to your key.
 - `OPENAI_API_KEY` for OpenAI API; `OPENAI_MODEL` chooses a model available to your key.
 
-For MCP agents, Patex **exposes MCP tools** using its SDK stdio server. Example in Claude Code MCP configuration on the server (or another host with a remote MCP bridge):
+For MCP agents, Patex exposes the same project tools over stdio and `POST /mcp` (Streamable HTTP). The HTTP endpoint requires `Authorization: Bearer <PATEX_ACCESS_TOKEN>` and a hostname listed in `PATEX_MCP_ALLOWED_HOSTS`. Example stdio configuration for a client that has controlled Docker access on the server:
 
 ```json
 {
@@ -67,7 +67,7 @@ For MCP agents, Patex **exposes MCP tools** using its SDK stdio server. Example 
 }
 ```
 
-The MCP server is run inside the app container so it shares the project storage. Remote MCP HTTP transport and **consuming** LlamaFarm's own MCP tools from the Patex chat panel are **future integrations**, not implemented in this MVP. The local LlamaFarm model itself can still work through its chat API. Do not expose `docker exec` access to an untrusted agent.
+The stdio server runs inside the app container so it shares project storage. The HTTP route makes those tools available to remote MCP clients over your private network when they have the token. The Patex chat panel calls LlamaFarm's chat API; **consuming LlamaFarm's own MCP tools** from that panel is not implemented. Do not expose `docker exec` access to an untrusted agent.
 
 ## Architecture
 

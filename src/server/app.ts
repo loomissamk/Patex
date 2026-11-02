@@ -1,7 +1,10 @@
 import express, { type ErrorRequestHandler } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { ProjectStore } from './store.js';
 import { askAI } from './ai.js';
+import { createPatexMcpServer } from './mcp-server.js';
 import type { AiProvider, CompileResult } from '../shared/types.js';
 
 export function createApp(store: ProjectStore, options: { token?: string; compilerUrl?: string } = {}) {
@@ -9,6 +12,34 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
   app.disable('x-powered-by');
   app.use(express.json({ limit: '250kb' }));
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'patex' }));
+  // Fresh MCP server and transport for each request prevents cross-client state leaks.
+  app.all('/mcp', async (req, res) => {
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+    const expected = options.token ? Buffer.from(`Bearer ${options.token}`) : null;
+    const actual = Buffer.from(req.header('authorization') || '');
+    if (!expected || actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      res.status(401).json({ error: 'Unauthorized' }); return;
+    }
+    const allowed = new Set((process.env.PATEX_MCP_ALLOWED_HOSTS || 'localhost,127.0.0.1').split(',').map(x => x.trim().toLowerCase()));
+    const host = (req.header('host') || '').split(':')[0].toLowerCase();
+    let originHost = '';
+    try { if (req.header('origin')) originHost = new URL(req.header('origin')!).hostname.toLowerCase(); }
+    catch { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (!allowed.has(host) || (originHost && !allowed.has(originHost))) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const server = createPatexMcpServer(store, options.compilerUrl || 'http://127.0.0.1:3001');
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch {
+      if (!res.headersSent) res.status(500).json({ error: 'MCP request failed' });
+    } finally {
+      await server.close().catch(() => {});
+      await transport.close().catch(() => {});
+    }
+  });
   app.use('/api', (req, res, next) => {
     if (!options.token) { next(); return; }
     const auth = req.header('authorization') || '';
