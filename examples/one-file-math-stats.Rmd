@@ -1,0 +1,72 @@
+---
+title: "One-file mathematics and statistics"
+author: "Patex example"
+output: pdf_document
+references:
+  - id: fisher1925
+    type: book
+    title: Statistical Methods for Research Workers
+    author:
+      - family: Fisher
+        given: Ronald A.
+    issued:
+      date-parts:
+        - [1925]
+---
+
+# A mean with its calculation
+
+The observations are $x=(2,4,6,8)$, so the sample mean is
+
+$$
+\bar{x}=\frac{1}{n}\sum_{i=1}^{n}x_i
+=\frac{2+4+6+8}{4}=5.
+$$
+
+```{r analysis, echo=TRUE}
+x <- c(2, 4, 6, 8)
+n <- length(x)
+sample_mean <- mean(x)
+sample_sd <- sd(x)
+standard_error <- sample_sd / sqrt(n)
+c(mean = sample_mean, standard_error = standard_error)
+```
+
+The computed mean is `r sample_mean`, and its standard error is
+`r round(standard_error, 4)`. The calculation and this sentence use the same
+R variables.
+
+The Python and Node chunks below also run in this document build. The Node
+chunk uses a simple TypeScript type annotation supported by the pinned Node
+runtime; it is not a general TypeScript project build.
+
+```{python, echo=TRUE}
+python_values = [2, 4, 6, 8]
+print("Python mean:", sum(python_values) / len(python_values))
+```
+
+```{node, echo=TRUE}
+const typedMean: number = [2, 4, 6, 8].reduce((a, b) => a + b, 0) / 4;
+console.log("Typed Node mean:", typedMean);
+```
+
+# Matrix notation
+
+For $A=\begin{pmatrix}1&2\\3&4\end{pmatrix}$ and
+$v=\begin{pmatrix}2\\1\end{pmatrix}$, ordinary matrix multiplication gives
+
+$$
+Av=\begin{pmatrix}1&2\\3&4\end{pmatrix}
+\begin{pmatrix}2\\1\end{pmatrix}
+=\begin{pmatrix}4\\10\end{pmatrix}.
+$$
+
+The next plot is generated during the same PDF build.
+
+```{r figure, echo=FALSE, fig.width=5, fig.height=3, fig.cap="The four observations and their mean."}
+plot(seq_along(x), x, pch = 19, xlab = "Observation", ylab = "Value")
+abline(h = sample_mean, col = "blue", lwd = 2)
+```
+
+A citation can also live in this one source file through its YAML reference
+metadata [@fisher1925].

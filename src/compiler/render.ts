@@ -46,7 +46,7 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
         cwd: workdir, timeout: 120_000, maxBuffer: 1024 * 1024,
         env: {
           PATH: '/opt/quarto/bin:/usr/local/bin:/usr/bin:/bin', HOME: workdir, TMPDIR: workdir,
-          LANG: 'C.UTF-8', R_LIBS_USER: workdir, QUARTO_DISABLE_VERSION_CHECK: '1',
+          LANG: 'C.UTF-8', R_LIBS_USER: workdir, RETICULATE_PYTHON: '/usr/bin/python3', QUARTO_DISABLE_VERSION_CHECK: '1',
         },
       });
       const pdf = await readFile(path.join(workdir, 'main.pdf'));
