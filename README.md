@@ -90,6 +90,8 @@ The tested [one-file example](examples/one-file-math-stats.Rmd) combines equatio
 
 An existing Rmd that calls `source("R/utils.R")`, loads unavailable R packages, or reads external data is still a multi-file project. Patex currently cannot upload those dependencies or install per-project packages. A self-contained copy can put the helper in a setup chunk; broader project-file and dependency support remain in [TODO.md](TODO.md).
 
+For older Rmd documents, the compiler recognizes `\(...\)` and standalone `\[...\]` math delimiters in a temporary render copy. The saved source stays exactly as written; fenced code and TeX line spacing such as `\\[6pt]` are left alone.
+
 ## Supporting scripts in native TeX projects
 
 Open `analysis.js`, `analysis.py`, or `analysis.R`, edit the script, and press **Run** (or Ctrl/Cmd+Enter). Console output appears below the editor. Files the script writes in its working directory appear in **Generated files**; use **Insert** for TeX snippets and images. For example, the starter JavaScript and Python scripts create a number that can be inserted with `\input{assets/js-result.tex}` or `\input{assets/python-result.tex}`. The R starter script creates a PNG plot; Patex adds `graphicx` when you insert it. Recompile to see the result in the PDF pane.
