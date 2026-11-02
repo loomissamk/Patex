@@ -9,7 +9,7 @@ import { artifactName } from '../shared/artifacts.js';
 import { readArchive, writeArchive } from './archive.js';
 import { projectLimits } from '../shared/project-files.js';
 import { buildProject, cancelBuild } from './build.js';
-import { compilerRequest } from './compiler-client.js';
+import { compilerRequest, WorkerUnavailable } from './compiler-client.js';
 import { Accounts, cookieToken, matchesMaster, sessionCookie, type PublicAccount } from './auth.js';
 import { publishingIndex } from './publishing.js';
 import { publishingTemplates } from '../shared/publishing-templates.js';
@@ -308,7 +308,8 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
   });
   app.use('/api', ((_err, _req, res, _next) => {
     const e = _err as NodeJS.ErrnoException;
-    if ((e as NodeJS.ErrnoException & { type?: string }).type === 'entity.too.large') res.status(413).json({ error: 'Upload exceeds the size limit' });
+    if (e instanceof WorkerUnavailable) res.status(e.status).json({ error: e.message });
+    else if ((e as NodeJS.ErrnoException & { type?: string }).type === 'entity.too.large') res.status(413).json({ error: 'Upload exceeds the size limit' });
     else if (e.code === 'ENOENT' || e.message === 'Invalid project ID') res.status(404).json({ error: 'Project or artifact not found' });
     else if (e.message === 'Feedback capture is off') res.status(403).json({ error: e.message });
     else if (/Invalid|limit|exceeds|exceeded|Choose|Select|ZIP|Archive|archive|Duplicate|Manifest|missing main|Cannot remove|Update the main|Use a |Username|Account unavailable|conflicts/.test(e.message)) res.status(400).json({ error: e.message });

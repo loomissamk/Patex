@@ -1,3 +1,4 @@
+import { parseDiagnostics } from '../src/compiler/diagnostics.js';
 import { compileLatex } from '../src/compiler/compile.js';
 import { attachBibliography, renderLiterate } from '../src/compiler/render.js';
 describe('compiler boundaries', () => {
@@ -20,4 +21,8 @@ describe('compiler boundaries', () => {
     expect(attachBibliography(source, '@book{knuth1984}')).toContain('---\nbibliography: references.bib\ntitle:');
     expect(attachBibliography(source, '')).toBe(source);
   });
+});
+
+test('maps file-line errors to the project-relative editor file', () => {
+  expect(parseDiagnostics('./main.tex:7: Undefined control sequence', 'main.tex')[0]).toMatchObject({ file: 'main.tex', line: 7 });
 });

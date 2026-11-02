@@ -5,7 +5,7 @@ export function parseDiagnostics(log: string, mainFile: string): Diagnostic[] {
   const items: Diagnostic[] = [];
   for (const line of clean.split(/\r?\n/)) {
     const tex = line.match(/(?:^|\s)([^\s:]+\.(?:tex|latex|sty|cls)):(\d+):\s*(.+)/);
-    if (tex) items.push({ severity: 'error', file: tex[1].replace(/^.*\/patex-[^/]+\//, ''), line: Number(tex[2]), message: tex[3] });
+    if (tex) items.push({ severity: 'error', file: tex[1].replace(/^.*\/patex-[^/]+\//, '').replace(/^\.\//, ''), line: Number(tex[2]), message: tex[3] });
     else if (/Quitting from lines? /i.test(line)) {
       const rmd = line.match(/lines?\s+(\d+)(?:-\d+)?\s*(?:\(([^)]+)\))?/i);
       if (rmd) items.push({ severity: 'error', file: rmd[2] || mainFile, line: Number(rmd[1]), message: line.trim() });

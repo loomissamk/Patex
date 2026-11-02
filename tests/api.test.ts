@@ -16,6 +16,14 @@ describe('HTTP API', () => {
     const list = await request(app).get('/api/projects').set('Authorization', 'Bearer test-token').expect(200);
     expect(list.body).toHaveLength(1);
   });
+  test('reports an unavailable worker without losing the source', async () => {
+    const app = createApp(new ProjectStore(root), { compilerUrl: 'unix:/nonexistent/patex-worker.sock' });
+    const p = await request(app).post('/api/projects').send({ name: 'Saved paper' }).expect(201);
+    const result = await request(app).post(`/api/projects/${p.body.id}/compile`).send({ force: true }).expect(503);
+    expect(result.body.error).toContain('Your edits are saved');
+    const saved = await request(app).get(`/api/projects/${p.body.id}`).expect(200);
+    expect(saved.body.latex).toBe(p.body.latex);
+  });
   test('rejects invalid request data and path IDs', async () => {
     const app = createApp(new ProjectStore(root));
     await request(app).post('/api/projects').send({ name: 7 }).expect(400);
