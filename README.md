@@ -2,6 +2,8 @@
 
 A ready-to-extend **TypeScript/React + Node.js** LaTeX/PDF workspace. Edit source on the left, inspect the generated PDF on the right, and ask local/remote AI models to suggest edits. It is a working **MVP**, not a complete Overleaf replacement.
 
+The browser editor works on macOS, Windows, and Linux. Its Ctrl/Cmd shortcuts use the platform's modifier key. The private `.sl` hostname requires Tailscale and a client hosts entry on each computer; the separate infrastructure repository includes Mac/Linux and Windows installers.
+
 ## Features
 
 - Default 50/50 LaTeX source and live PDF view, with a collapsible project panel

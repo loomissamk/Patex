@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { BookOpen, Bot, Check, ChevronDown, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, Play, Settings2, Sparkles, Terminal, Upload, X } from 'lucide-react';
+import { BookOpen, Bot, Check, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, Play, Settings2, Sparkles, Terminal, Upload, X } from 'lucide-react';
 import LatexEditor from './LatexEditor';
 
 type ProjectSummary = { id: string; name: string; updatedAt: string; hasPdf: boolean };
@@ -253,10 +253,10 @@ export default function App() {
         {projects.length === 0 && <p className="empty-sidebar">Create a project to begin writing.</p>}
       </aside>
       <main className="editor-workspace">
-        <div className="pane-head"><span><Code2 size={16}/> LATEX SOURCE</span><div><button className="text-button" onClick={() => fileInput.current?.click()} disabled={!project}><Upload size={15}/> Import</button><input ref={fileInput} hidden type="file" accept=".tex,text/plain" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadTex(f); e.currentTarget.value = ''; }}/><button className="text-button" onClick={downloadText} disabled={!project}><Download size={14}/> .tex</button><span className="tab-label">main.tex <ChevronDown size={12}/></span></div></div>
+        <div className="pane-head"><span><Code2 size={16}/> LATEX SOURCE</span><div><button className="text-button" onClick={() => fileInput.current?.click()} disabled={!project}><Upload size={15}/> Import</button><input ref={fileInput} hidden type="file" accept=".tex,text/plain" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadTex(f); e.currentTarget.value = ''; }}/><button className="text-button" onClick={downloadText} disabled={!project}><Download size={14}/> .tex</button><span className="tab-label">main.tex</span></div></div>
         {creating ? <div className="placeholder" role="status"><LoaderCircle className="spin" size={32}/><h2>Creating project…</h2></div> : project ? <div className="editor-wrapper"><LatexEditor key={project.id} value={latex} onChange={edit} onSave={() => { void save(project.id, latex, projectName, revision.current); }} onCompile={() => { void compile(project.id, latex, projectName, revision.current); }} requestCompletion={requestCompletion}/></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
         {showDiagnostics && <div className="diagnostics"><div className="diagnostics-head"><Terminal size={14}/> COMPILE OUTPUT <button onClick={() => setShowDiagnostics(false)} aria-label="Close compile output"><X size={15}/></button></div><pre>{diagnostics || 'No output yet'}</pre></div>}
-        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><span>Tab accepts inline suggestions</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>⌘ ↵ compile</span></div>
+        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><span>Tab accepts inline suggestions</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>Ctrl/Cmd+Enter compile</span></div>
       </main>
       <div className="splitter" role="separator" aria-label="Resize editor and PDF panels" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={75} aria-valuenow={editorWidth} tabIndex={0}
         onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setResizing(true); }}
