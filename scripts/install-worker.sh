@@ -3,6 +3,8 @@ set -euo pipefail
 task_image="${1:-patex-runner}"
 task_root="${PATEX_WORKER_HOME:-$HOME/.local/share/patex-worker}"
 task_digest="$(docker image inspect --format '{{.Id}}' "$task_image")"
+# Retain a content-named tag so rebuilding the mutable image tag cannot evict the active digest.
+docker tag "$task_image" "patex-runner-pinned:${task_digest#sha256:}"
 mkdir -p "$task_root" "$HOME/.config/systemd/user"
 chmod 700 "$task_root"
 # Extract the matching Node binary and broker from the already built image.
