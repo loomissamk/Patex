@@ -13,6 +13,7 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 - [x] Verify browser creation/edit/preview and feedback controls against the staging app; confirm Rmd citation text in the generated PDF.
 - [x] Deploy through Nginx; verify live Rmd and Qmd computed PDF text, resolve an Rmd citation, and preserve the existing homework PDF byte for byte.
 - [x] Compile an existing single-file matrix homework unchanged; compile a substantial statistics homework after embedding its external R helper in a copy. Render a standalone mixed R/Python/typed Node/math/plot/citation example in staging and live Patex, and inspect both PDF pages.
+- [x] Audit 30 active Matrix Theory and Statistics source files through the live compiler. Route `.Rmd` through native R Markdown for closer pagination; verify 18/19 Matrix files unchanged, 1/11 Statistics files unchanged, and all 10 remaining Statistics files as one-file copies with their shared helper embedded. Keep the detailed private audit outside this public repo.
 
 ### 1. Document-first authoring
 
@@ -23,6 +24,7 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 - [ ] Keep the source/PDF split at 50/50 by default. Build after a short typing pause, cancel or supersede stale builds, keep the last good PDF, preserve preview position, and show errors at their source lines. Long code cells need an explicit run control and cache/freeze options.
 - [ ] Allow a project to contain supporting source, images, data, and generated artifacts without making separate script tabs the primary writing flow.
 - [ ] Import an existing multi-file Rmd project with sourced R helpers, data, and its declared packages. The current compiler cannot render such a project unchanged from a single source upload.
+- [ ] Import an existing TeX project with its figures and subdirectories. The citation-audit source still needs its external PNG folder.
 
 ### 2. Publishing essentials
 
