@@ -6,6 +6,10 @@ import { promisify } from 'node:util';
 import { projectPath } from '../shared/project-files.js';
 const execute = promisify(execFile);
 export interface SyncInput { mode: 'forward' | 'inverse'; pdfBase64: string; synctexBase64: string; sourceRoot: string; file?: string; line?: number; page?: number; x?: number; y?: number }
+export function sourceFileName(root: string, filename: string): string | undefined {
+  const relative = filename.startsWith('/') ? path.posix.relative(root, filename) : path.posix.normalize(filename);
+  try { return projectPath(relative); } catch { return undefined; }
+}
 export async function sourceMap(input: SyncInput): Promise<{ page?: number; x?: number; y?: number; file?: string; line?: number }> {
   const dir = await mkdtemp(path.join(tmpdir(), 'patex-sync-'));
   try {
@@ -19,6 +23,7 @@ export async function sourceMap(input: SyncInput): Promise<{ page?: number; x?: 
     const number = (key: string) => { const value = stdout.match(new RegExp(`^${key}:([\\d.-]+)`, 'm')); return value ? Number(value[1]) : undefined; };
     if (input.mode === 'forward') return { page: number('Page'), x: number('x'), y: number('y') };
     const filename = stdout.match(/^Input:(.+)$/m)?.[1];
-    return { ...(filename ? { file: projectPath(filename.replace(`${input.sourceRoot}/`, '')) } : {}), line: number('Line') };
+    const file = filename ? sourceFileName(input.sourceRoot, filename.trim()) : undefined;
+    return file ? { file, line: number('Line') } : {};
   } finally { await rm(dir, { recursive: true, force: true }); }
 }

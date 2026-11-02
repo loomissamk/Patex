@@ -9,9 +9,15 @@ interface Credential { accountId: string; expires: number; kind: 'session' | 'in
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const publicAccount = ({ password: _password, ...user }: Account): PublicAccount => user;
 const equal = (a: string, b: string) => { const x = Buffer.from(a); const y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
+const accountQueues = new Map<string, Promise<unknown>>();
 export class Accounts {
   private root: string;
   constructor(dataRoot: string) { this.root = path.join(dataRoot, '_auth'); }
+  private async locked<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = (accountQueues.get(this.root) || Promise.resolve()).catch(() => {}).then(operation);
+    accountQueues.set(this.root, pending);
+    try { return await pending; } finally { if (accountQueues.get(this.root) === pending) accountQueues.delete(this.root); }
+  }
   private async write(name: string, value: unknown): Promise<void> {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const temp = path.join(this.root, `.auth-${randomUUID()}`);
@@ -22,7 +28,8 @@ export class Accounts {
   async list(): Promise<PublicAccount[]> { return (await this.users()).map(publicAccount); }
   private async users(): Promise<Account[]> { const entries = await readdir(this.root).catch(() => []); return (await Promise.all(entries.filter(name => name.startsWith('user-')).map(name => this.read<Account>(name)))).filter((user): user is Account => Boolean(user)); }
   async owner(): Promise<PublicAccount | null> { const owner = (await this.users()).find(user => user.role === 'owner'); return owner ? publicAccount(owner) : null; }
-  async create(username: string, owner = false): Promise<PublicAccount> {
+  async create(username: string, owner = false): Promise<PublicAccount> { return this.locked(() => this.createUnlocked(username, owner)); }
+  private async createUnlocked(username: string, owner: boolean): Promise<PublicAccount> {
     if (typeof username !== 'string' || !/^[A-Za-z0-9_.-]{3,64}$/.test(username)) throw new Error('Use a username of 3–64 letters, numbers, dots, or underscores');
     const users = await this.users();
     if (users.length >= 30) throw new Error('Pilot account limit reached (30)');
@@ -61,14 +68,16 @@ export class Accounts {
     return user && !user.disabled ? publicAccount(user) : null;
   }
   async revoke(token: string): Promise<void> { await unlink(path.join(this.root, `token-${digest(token)}.json`)).catch(() => {}); }
-  async setPassword(id: string, password: string): Promise<void> {
+  async setPassword(id: string, password: string): Promise<void> { return this.locked(() => this.passwordUnlocked(id, password)); }
+  private async passwordUnlocked(id: string, password: string): Promise<void> {
     if (typeof password !== 'string' || password.length < 12 || password.length > 128) throw new Error('Use a password of 12–128 characters');
     const user = await this.user(id); if (!user) throw new Error('Account unavailable');
     const salt = randomBytes(16).toString('hex'); const key = (await scrypt(password, salt, 64) as Buffer).toString('hex');
     await this.write(`user-${id}.json`, { ...user, password: `${salt}:${key}` });
   }
   async apiToken(id: string): Promise<string> { const user = await this.user(id); if (!user || user.disabled) throw new Error('Account unavailable'); return this.credential(user, 'api', 30 * 24 * 60 * 60 * 1000); }
-  async disable(id: string, disabled: boolean): Promise<void> { const user = await this.user(id); if (!user || user.role === 'owner') throw new Error('Cannot disable owner'); await this.write(`user-${id}.json`, { ...user, disabled }); }
+  async disable(id: string, disabled: boolean): Promise<void> { return this.locked(() => this.disableUnlocked(id, disabled)); }
+  private async disableUnlocked(id: string, disabled: boolean): Promise<void> { const user = await this.user(id); if (!user || user.role === 'owner') throw new Error('Cannot disable owner'); await this.write(`user-${id}.json`, { ...user, disabled }); }
 }
 export function sessionCookie(token: string, secure = process.env.PATEX_COOKIE_SECURE === 'true'): string { return `patex_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${token ? 7 * 24 * 60 * 60 : 0}${secure ? '; Secure' : ''}`; }
 export function cookieToken(cookie = ''): string | null { return cookie.match(/(?:^|;\s*)patex_session=([^;]*)/)?.[1] ?? null; }

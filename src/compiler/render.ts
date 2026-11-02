@@ -51,7 +51,7 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
       ];
       const command = format === 'rmd' ? 'Rscript' : 'quarto';
       const args = format === 'rmd'
-        ? ['--vanilla', '-e', `${options.useCache ? 'knitr::opts_chunk$set(cache=TRUE, cache.path=paste0(getwd(),"/.patex-cache/"), fig.path=paste0(getwd(),"/.patex-cache/figures/"));' : ''}rmarkdown::render(${JSON.stringify(filename)}, output_format="pdf_document", output_file="patex-output.pdf", output_dir=getwd(), quiet=TRUE)`]
+        ? ['--vanilla', '-e', `${options.useCache ? 'knitr::opts_chunk$set(cache=TRUE);knitr::opts_hooks$set(cache=function(options){options$cache.path=paste0(Sys.getenv("HOME"),"/.patex-cache/");options$fig.path=paste0(Sys.getenv("HOME"),"/.patex-cache/figures/");options});' : ''}rmarkdown::render(${JSON.stringify(filename)}, output_format="pdf_document", output_file="patex-output.pdf", output_dir=getwd(), quiet=TRUE)`]
         : quartoArgs;
       const { stdout, stderr } = await execFileAsync(command, args, {
         cwd: workdir, timeout: 120_000, maxBuffer: 1024 * 1024,

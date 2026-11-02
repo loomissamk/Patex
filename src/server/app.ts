@@ -35,6 +35,14 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
     value.count++; attempts.set(key, value); return value.count <= count;
   };
   app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.set('X-Content-Type-Options', 'nosniff').set('Referrer-Policy', 'no-referrer').set('X-Frame-Options', 'DENY');
+    if (process.env.NODE_ENV === 'production') res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    next();
+  });
+  app.use('/auth', (req, res, next) => {
+    try { if (req.header('origin') && new URL(req.header('origin')!).host !== req.header('host')) { res.status(403).json({ error: 'Cross-origin requests are not permitted' }); return; } next(); } catch { res.sendStatus(403); }
+  });
   app.use(express.json({ limit: '2mb' }));
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'patex' }));
   app.get('/auth/session', async (req, res, next) => { try { res.set('cache-control', 'no-store').json({ user: await identity(req) }); } catch (error) { next(error); } });
@@ -54,11 +62,13 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       res.setHeader('Set-Cookie', sessionCookie(result.token)); res.json({ user: result.user });
     } catch { res.status(401).json({ error: 'Invitation is invalid or expired' }); }
   });
-  app.post('/auth/owner', async (req, res) => {
+  app.post('/auth/owner', async (req, res, next) => {
+    try {
     if (!matchesMaster(req.header('authorization') || '', options.token)) { res.status(401).json({ error: 'Invalid owner access token' }); return; }
     const owner = await accounts.owner() || await accounts.create('samuel', true);
     const result = await accounts.exchangeInvite(await accounts.invite(owner.id));
     res.setHeader('Set-Cookie', sessionCookie(result.token)); res.json({ user: result.user });
+    } catch (error) { next(error); }
   });
   app.post('/auth/logout', async (req, res) => { const token = cookieToken(req.header('cookie')); if (token) await accounts.revoke(token); res.setHeader('Set-Cookie', sessionCookie('')); res.sendStatus(204); });
   app.use(['/api', '/mcp'], async (req, res, next) => {
@@ -75,6 +85,7 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
     } catch { res.status(403).json({ error: 'Invalid authentication or origin' }); }
   });
   app.get('/api/account', (_req, res) => res.json({ user: res.locals.user }));
+  app.get('/api/runtime', async (_req, res, next) => { try { if (!options.compilerUrl) throw new Error('Compiler not configured'); res.json(await compilerRequest(options.compilerUrl, 'status', {})); } catch (error) { next(error); } });
   app.post('/api/account/password', async (req, res, next) => { try { const user = res.locals.user as PublicAccount; await accounts.setPassword(user.id, req.body?.password); res.sendStatus(204); } catch (error) { next(error); } });
   app.post('/api/account/api-token', async (_req, res, next) => { try { res.json({ token: await accounts.apiToken((res.locals.user as PublicAccount).id), expiresInDays: 30 }); } catch (error) { next(error); } });
   app.use('/api/admin', (_req, res, next) => { if ((res.locals.user as PublicAccount).role !== 'owner') { res.status(403).json({ error: 'Owner access required' }); return; } next(); });
@@ -131,7 +142,7 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       const archive = await readArchive(req.body);
       const mainFile = typeof req.query.main === 'string' ? req.query.main : archive.mainFile;
       if (!mainFile || !archive.candidates.includes(mainFile)) { res.status(400).json({ error: 'Select the main document from the archive' }); return; }
-      res.status(201).json(await selected(res).importProject(typeof req.query.name === 'string' ? req.query.name : 'Imported project', mainFile, archive.files));
+      res.status(201).json(await selected(res).importProject(typeof req.query.name === 'string' ? req.query.name : 'Imported project', mainFile, archive.files, archive.engine));
     } catch (error) { next(error); }
   });
   app.post('/api/projects', async (req, res, next) => {

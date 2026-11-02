@@ -1,10 +1,10 @@
 import yauzl from 'yauzl';
 import { ZipFile } from 'yazl';
 import { decodedFiles, formatForFile, projectLimits, projectPath } from '../shared/project-files.js';
-import type { ProjectFile } from '../shared/types.js';
+import type { ProjectFile, Project } from '../shared/types.js';
 
 const ignoredPath = /(?:^|\/)(?:\.git|node_modules|\.venv|__MACOSX|\.DS_Store)(?:\/|$)|(?:^|\/)renv\/library\//i;
-export async function readArchive(data: Buffer): Promise<{ files: ProjectFile[]; candidates: string[]; mainFile?: string; ignored: string[] }> {
+export async function readArchive(data: Buffer): Promise<{ files: ProjectFile[]; candidates: string[]; mainFile?: string; engine?: Project['engine']; ignored: string[] }> {
   const files: ProjectFile[] = [];
   const ignored: string[] = [];
   let total = 0;
@@ -41,16 +41,17 @@ export async function readArchive(data: Buffer): Promise<{ files: ProjectFile[];
   if (first && files.every(f => f.name.startsWith(`${first}/`))) for (const file of files) file.name = file.name.slice(first.length + 1);
   decodedFiles(files);
   let mainFile: string | undefined;
+  let engine: Project['engine'] | undefined;
   const manifest = files.find(f => f.name === 'patex-manifest.json');
   if (manifest) {
-    try { const value = JSON.parse(Buffer.from(manifest.base64, 'base64').toString()) as { mainFile?: string }; if (value.mainFile) mainFile = projectPath(value.mainFile); }
+    try { const value = JSON.parse(Buffer.from(manifest.base64, 'base64').toString()) as { mainFile?: string; engine?: Project['engine'] }; if (value.mainFile) mainFile = projectPath(value.mainFile); if (value.engine) { if (!['pdflatex', 'xelatex', 'lualatex'].includes(value.engine)) throw new Error('Invalid engine'); engine = value.engine; } }
     catch { throw new Error('Invalid Patex project manifest'); }
   }
   const candidates = files.filter(f => /\.(tex|latex|rmd|qmd)$/i.test(f.name)).map(f => f.name).sort();
   if (mainFile && !candidates.includes(mainFile)) throw new Error('Manifest main document is missing');
   mainFile ||= candidates.length === 1 ? candidates[0] : undefined;
   if (mainFile) formatForFile(mainFile);
-  return { files: files.filter(f => f.name !== 'patex-manifest.json'), candidates, mainFile, ignored };
+  return { files: files.filter(f => f.name !== 'patex-manifest.json'), candidates, mainFile, engine, ignored };
 }
 export async function writeArchive(files: ProjectFile[]): Promise<Buffer> {
   const zip = new ZipFile();

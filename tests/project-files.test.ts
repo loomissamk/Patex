@@ -33,6 +33,7 @@ test('round trips a nested project without changing source or support bytes', as
     expect((await store.readFile(project.id, 'R/utils.R')).toString()).toBe('answer <- 42');
     const exported = await readArchive(await writeArchive(await store.exportFiles(project.id)));
     expect(exported.mainFile).toBe('homework/paper.Rmd');
+    expect(exported.engine).toBe('pdflatex');
     const imported = await store.importProject('Rebuilt', exported.mainFile!, exported.files);
     expect(imported.latex).toBe(source);
     expect((await store.readFile(imported.id, 'data/table.csv')).toString()).toBe('x,y\n1,2');
@@ -53,5 +54,16 @@ test('history restores source and helper together, and archive is reversible', a
     await store.update(p.id, { archived: true });
     expect(await store.list()).toHaveLength(0);
     expect(await store.list(true)).toHaveLength(1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('round trips a selected PDF engine', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'patex-engine-'));
+  try {
+    const store = new ProjectStore(root);
+    const original = await store.importProject('Unicode paper', 'main.tex', [file('main.tex', 'source')], 'xelatex');
+    const archive = await readArchive(await writeArchive(await store.exportFiles(original.id)));
+    const restored = await store.importProject('Copy', archive.mainFile!, archive.files, archive.engine);
+    expect(restored.engine).toBe('xelatex');
   } finally { await rm(root, { recursive: true, force: true }); }
 });

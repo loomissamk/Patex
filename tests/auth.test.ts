@@ -23,10 +23,20 @@ test('one-use invitations and sessions keep guest projects out of the owner work
     await request(app).post('/api/admin/users').set('Cookie', cookie).send({ username: 'intruder' }).expect(403);
     await request(app).post('/api/projects').set('Cookie', cookie).set('Origin', 'http://evil.example').send({ name: 'CSRF' }).expect(403);
     await accounts.setPassword(member.id, 'a long test password');
+    await request(app).post('/auth/login').set('Origin', 'https://evil.example').send({ username: 'researcher', password: 'a long test password' }).expect(403);
     await request(app).post('/auth/login').send({ username: 'researcher', password: 'wrong' }).expect(401);
     await request(app).post('/auth/login').send({ username: 'researcher', password: 'a long test password' }).expect(200);
     await accounts.disable(member.id, true);
     await request(app).get('/api/projects').set('Cookie', cookie).expect(401);
     expect((await accounts.owner())?.id).toBe(owner.id);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('serializes account creation across requests and store instances', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'patex-accounts-race-'));
+  try {
+    const attempts = await Promise.allSettled(Array.from({ length: 5 }, () => new Accounts(root).create('same_name')));
+    expect(attempts.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(await new Accounts(root).list()).toHaveLength(1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

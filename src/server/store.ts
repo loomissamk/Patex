@@ -102,7 +102,7 @@ export class ProjectStore {
     const dir = this.projectDir(id); const temp = path.join(dir, `.cache-${randomUUID()}.tmp`);
     await writeFile(temp, JSON.stringify({ key, files }), { mode: 0o600 }); await rename(temp, path.join(dir, 'analysis-cache.json'));
   }
-  async importProject(name: string, mainFile: string, files: ProjectFile[]): Promise<Project> {
+  async importProject(name: string, mainFile: string, files: ProjectFile[], engine: Project['engine'] = 'pdflatex'): Promise<Project> {
     const decoded = decodedFiles(files);
     mainFile = projectPath(mainFile);
     const main = decoded.find(file => file.name === mainFile);
@@ -111,7 +111,7 @@ export class ProjectStore {
     const id = randomUUID(); const stage = path.join(this.root, `.import-${id}`);
     const bibPath = path.posix.join(path.posix.dirname(mainFile), 'references.bib');
     const bibliography = decoded.find(file => file.name === bibPath)?.data.toString('utf8') || '';
-    const imported: Project = { id, name: name.trim().slice(0, 100) || 'Imported project', mainFile, format: formatForFile(mainFile), engine: 'pdflatex', latex: main.data.toString('utf8'), bibliography, scripts: { ...defaultScripts }, feedbackEnabled: false, hasPdf: false, updatedAt: new Date().toISOString() };
+    const imported: Project = { id, name: name.trim().slice(0, 100) || 'Imported project', mainFile, format: formatForFile(mainFile), engine, latex: main.data.toString('utf8'), bibliography, scripts: { ...defaultScripts }, feedbackEnabled: false, hasPdf: false, updatedAt: new Date().toISOString() };
     try {
       await mkdir(stage, { recursive: true, mode: 0o700 });
       await materializeFiles(path.join(stage, 'files'), files.filter(file => file.name !== mainFile && file.name !== bibPath));

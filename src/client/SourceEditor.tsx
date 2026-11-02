@@ -76,8 +76,9 @@ type Props = {
 export default function SourceEditor({ language, value, onChange, onSave, onExecute, requestCompletion, onCompletionStatus, citationKeys = [], labels = [], diagnostics = [], jumpTo, onCursor, insertSnippet, onInserted }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onSave, onExecute, requestCompletion, onCompletionStatus, citationKeys, labels, onCursor, diagnostics });
-  callbacks.current = { onChange, onSave, onExecute, requestCompletion, onCompletionStatus, citationKeys, labels, onCursor, diagnostics };
+  const insertedNonce = useRef<number | null>(null);
+  const callbacks = useRef({ onChange, onSave, onExecute, requestCompletion, onCompletionStatus, citationKeys, labels, onCursor, diagnostics, onInserted });
+  callbacks.current = { onChange, onSave, onExecute, requestCompletion, onCompletionStatus, citationKeys, labels, onCursor, diagnostics, onInserted };
 
   useEffect(() => {
     if (!host.current) return;
@@ -190,7 +191,8 @@ export default function SourceEditor({ language, value, onChange, onSave, onExec
     const view = viewRef.current; if (view) forceLinting(view);
   }, [diagnostics]);
   useEffect(() => {
-    const view = viewRef.current; if (!view || !insertSnippet) return;
+    const view = viewRef.current; if (!view || !insertSnippet || insertedNonce.current === insertSnippet.nonce) return;
+    insertedNonce.current = insertSnippet.nonce;
     const selection = view.state.selection.main;
     const source = view.state.doc.toString();
     let from = selection.from; let to = selection.to;
@@ -198,8 +200,8 @@ export default function SourceEditor({ language, value, onChange, onSave, onExec
     if (language === 'rmd' || language === 'qmd') { const yaml = source.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/); if (yaml && from < yaml[0].length) from = to = yaml[0].length; }
     let template = insertSnippet.template;
     if (!insideMath(source, from)) template = insertSnippet.block ? language === 'latex' ? `\n\\[\n${template}\n\\]\n` : `\n$$\n${template}\n$$\n` : `$${template}$`;
-    snippet(template)(view, { label: 'Math expression' }, from, to); view.focus(); onInserted?.();
-  }, [insertSnippet, language, onInserted]);
+    snippet(template)(view, { label: 'Math expression' }, from, to); callbacks.current.onInserted?.(); view.focus();
+  }, [insertSnippet, language]);
 
   return <div className="source-editor" ref={host}/>;
 }
