@@ -13,6 +13,8 @@ The browser editor works on macOS, Windows, and Linux. Its Ctrl/Cmd shortcuts us
 - Debounced autosave and auto-compile after edits; manual **Compile** (Ctrl/Cmd+Enter)
 - Shows LaTeX compile errors and keeps the last successful PDF visible
 - Download `.tex` or generated `.pdf`; import `.tex` into a project
+- Edit and run JavaScript, Python, and R in project tabs; see console output and save generated files
+- Insert generated `.tex`, `.png`, `.jpg`, or `.pdf` files into the LaTeX source and rebuild the PDF
 - Ask LlamaFarm (OpenAI-compatible chat endpoint), Anthropic Claude API, or OpenAI API for LaTeX help
 - AI outputs are **suggestions**; explicit Apply button before source changes
 - MCP stdio and token-protected Streamable HTTP tools: list/get/create/update/compile projects for Claude Code, Codex and other MCP clients
@@ -38,7 +40,7 @@ A generic Nginx example is in `infra/nginx-patex.conf.example`. The actual priva
 
 ## Local development
 
-Node 22+ required. Install LaTeX (`pdflatex`) if you want to compile locally.
+Node 22+ required. Install LaTeX (`pdflatex`) to compile locally, and install Python 3 or R to run those languages without Docker. The Docker compiler image includes all three runtimes.
 
 ```bash
 npm install --no-audit --no-fund
@@ -75,6 +77,12 @@ For MCP agents, Patex exposes the same project tools over stdio and `POST /mcp` 
 
 The stdio server runs inside the app container so it shares project storage. The HTTP route makes those tools available to remote MCP clients over your private network when they have the token. The Patex chat panel calls LlamaFarm's chat API; **consuming LlamaFarm's own MCP tools** from that panel is not implemented. Do not expose `docker exec` access to an untrusted agent.
 
+## Research code in a document
+
+Open `analysis.js`, `analysis.py`, or `analysis.R`, edit the script, and press **Run** (or Ctrl/Cmd+Enter). Console output appears below the editor. Files the script writes in its working directory appear in **Generated files**; use **Insert** for TeX snippets and images. For example, the starter JavaScript and Python scripts create a number that can be inserted with `\input{assets/js-result.tex}` or `\input{assets/python-result.tex}`. The R starter script creates a PNG plot; Patex adds `graphicx` when you insert it. Recompile to see the result in the PDF pane.
+
+Scripts run for at most 15 seconds. Source is limited to 100 KB, console output to 64 KB per stream, and generated files to 12 files / 512 KB each / 2 MB per project. The image includes Node 22, Debian Python 3, and Debian R with base packages. Scripts do not install packages or upload datasets yet. Generated files are preserved with the project until deleted.
+
 ## Architecture
 
 ```text
@@ -88,16 +96,15 @@ Patex Node/Express API (localhost:4318)
        |-- isolated compiler HTTP on Docker network only
        +-- stdio MCP for explicit automation
 
-Compiler container: nonroot Node + pdflatex -no-shell-escape (CPU and memory limits)
+Compiler container: nonroot Node + Python 3 + R + pdflatex -no-shell-escape (CPU and memory limits)
 ```
 
 ## Safety and limitations
 
-- Compiler rejects sources over 200 KB and PDFs over 5 MB, uses temporary working directories and disables TeX `shell-escape`. The container is non-root, read-only, and resource limited. TeX is complex; **do not treat this as secure multi-tenant arbitrary-file processing** without further isolation (network denial for compiler plus IPC, seccomp/AppArmor policy, stronger filesystem isolation).
-- PDF compilation supports a single `main.tex` document; bibliography/multifile projects and uploaded images are out of scope for the MVP.
+- Compiler rejects sources over 200 KB and PDFs over 5 MB, uses temporary working directories and disables TeX `shell-escape`. Script execution has time/output/artifact limits. The container is non-root, read-only, and resource limited. It still shares an internal network with the app. **Do not offer this runner to untrusted public users** without stronger per-run network and filesystem isolation, process limits, rate limits, and a security review.
+- PDF compilation supports a single `main.tex` document plus generated artifacts; bibliography, arbitrary multi-file projects, uploaded images, and datasets are out of scope for this MVP.
 - PDF preview uses browser-native embedding, not full PDF.js annotation tools.
-- R/Python execution and generated plots are not yet supported.
-- R, Python, JavaScript execution and a future subscription release are tracked in [ROADMAP.md](ROADMAP.md).
+- Runtime/package expansion and a future subscription release are tracked in [ROADMAP.md](ROADMAP.md).
 - Authentication is a single bearer token and Tailscale boundary; production public deployment requires a more complete identity/access model and TLS.
 - When editing rapidly, only one compilation is sent at a time; rapid edits may temporarily leave the last successful PDF visible until another build.
 - No direct file management of uploaded PDFs or multiuser collaboration yet.

@@ -5,7 +5,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { ProjectStore } from './store.js';
 import { askAI, completeAI } from './ai.js';
 import { createPatexMcpServer } from './mcp-server.js';
-import type { AiProvider, CompileResult } from '../shared/types.js';
+import type { AiProvider, CompileResult, RunResult, ScriptLanguage } from '../shared/types.js';
+import { artifactName } from '../shared/artifacts.js';
 
 export function createApp(store: ProjectStore, options: { token?: string; compilerUrl?: string } = {}) {
   const app = express();
@@ -73,6 +74,45 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       res.json(await store.update(req.params.id, { latex, name }));
     } catch (err) { next(err); }
   });
+  app.put('/api/projects/:id/scripts/:language', async (req, res, next) => {
+    try {
+      const language = req.params.language as ScriptLanguage;
+      const source = req.body?.source;
+      if (!['javascript', 'python', 'r'].includes(language) || typeof source !== 'string' || Buffer.byteLength(source, 'utf8') > 100_000) { res.status(400).json({ error: 'Invalid language or source' }); return; }
+      const project = await store.updateScript(req.params.id, language, source);
+      res.json({ language, source: project.scripts[language], updatedAt: project.updatedAt });
+    } catch (err) { next(err); }
+  });
+  app.post('/api/projects/:id/run/:language', async (req, res, next) => {
+    try {
+      const language = req.params.language as ScriptLanguage;
+      const source = req.body?.source;
+      if (!['javascript', 'python', 'r'].includes(language) || typeof source !== 'string' || Buffer.byteLength(source, 'utf8') > 100_000) { res.status(400).json({ error: 'Invalid language or source' }); return; }
+      if (!options.compilerUrl) { res.status(503).json({ error: 'Code runner is not configured' }); return; }
+      await store.updateScript(req.params.id, language, source);
+      const worker = await fetch(`${options.compilerUrl}/run`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ language, source }), signal: AbortSignal.timeout(20000),
+      });
+      if (!worker.ok) { res.status(502).json({ error: `Code runner failed: ${worker.status}` }); return; }
+      const result = await worker.json() as RunResult;
+      if (result.ok) await store.saveArtifacts(req.params.id, result.artifacts);
+      res.json({ ok: result.ok, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, artifacts: result.ok ? await store.listArtifacts(req.params.id) : [] });
+    } catch (err) { next(err); }
+  });
+  app.get('/api/projects/:id/artifacts', async (req, res, next) => {
+    try { res.json(await store.listArtifacts(req.params.id)); } catch (err) { next(err); }
+  });
+  app.get('/api/projects/:id/artifacts/:name', async (req, res, next) => {
+    try {
+      const name = req.params.name;
+      if (!artifactName.test(name)) { res.status(400).json({ error: 'Invalid artifact name' }); return; }
+      const type = name.endsWith('.png') ? 'image/png' : name.endsWith('.jpg') || name.endsWith('.jpeg') ? 'image/jpeg' : name.endsWith('.pdf') ? 'application/pdf' : name.endsWith('.csv') ? 'text/csv' : 'text/plain';
+      res.set('content-type', type).set('cache-control', 'no-store').send(await store.readArtifact(req.params.id, name));
+    } catch (err) { next(err); }
+  });
+  app.delete('/api/projects/:id/artifacts/:name', async (req, res, next) => {
+    try { await store.deleteArtifact(req.params.id, req.params.name); res.status(204).end(); } catch (err) { next(err); }
+  });
   app.get('/api/projects/:id/pdf', async (req, res, next) => {
     try { const pdf = await store.readPdf(req.params.id); res.set('content-type', 'application/pdf').set('cache-control', 'no-store').send(pdf); }
     catch (err) { next(err); }
@@ -84,7 +124,7 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       const startedSource = project.latex;
       const result = await fetch(`${options.compilerUrl}/compile`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ latex: startedSource }), signal: AbortSignal.timeout(65000),
+        body: JSON.stringify({ latex: startedSource, assets: await store.compileAssets(req.params.id) }), signal: AbortSignal.timeout(65000),
       });
       if (!result.ok) { res.status(502).json({ error: `Compiler failed: ${result.status}` }); return; }
       const compiled = await result.json() as CompileResult;
@@ -122,7 +162,8 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
   });
   app.use('/api', ((_err, _req, res, _next) => {
     const e = _err as NodeJS.ErrnoException;
-    if (e.code === 'ENOENT' || e.message === 'Invalid project ID') res.status(404).json({ error: 'Project not found' });
+    if (e.code === 'ENOENT' || e.message === 'Invalid project ID') res.status(404).json({ error: 'Project or artifact not found' });
+    else if (e.message.startsWith('Invalid artifact') || e.message.includes('artifact limit') || e.message.includes('Artifact exceeds')) res.status(400).json({ error: e.message });
     else res.status(500).json({ error: e.message.startsWith('Provider') || e.message.includes('configured') ? e.message : 'Internal error' });
   }) satisfies ErrorRequestHandler);
   // Serve Vite's production build; dev mode uses Vite directly.

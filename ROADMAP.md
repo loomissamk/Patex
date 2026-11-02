@@ -1,12 +1,14 @@
 # Patex roadmap
 
-## Next: executable research code
+## Executable research code
 
-- [ ] Add R, Python, and JavaScript files to a project with editor tabs and syntax support.
-- [ ] Run code in separate, resource limited workers with no host credentials or Docker socket access. Set time, memory, process, filesystem, and network limits before enabling execution.
-- [ ] Capture stdout, errors, plots, tables, and generated files as project artifacts. Let users insert selected artifacts into `main.tex` and refresh the PDF.
+- [x] Add JavaScript, Python, and R source tabs with syntax support.
+- [x] Run scripts in the compiler container with time, output, and artifact limits; capture console output and generated files.
+- [x] Insert generated TeX snippets and images into `main.tex` and rebuild the PDF.
+- [ ] Move arbitrary code execution to a fresh, isolated per-run worker with no network path to the app, a stricter process/filesystem policy, and independent quotas. The current shared container is for private use only.
 - [ ] Pin reproducible runtime and package versions. Decide which packages can be installed per project and how datasets are uploaded.
-- [ ] Add language specific tests using real generated plots and LaTeX builds.
+- [x] Test all three runtimes and compile a generated R plot to PDF in the V100 Docker image.
+- [ ] Add dataset upload, dependency management, and richer outputs such as interactive tables.
 
 ## AI and MCP
 

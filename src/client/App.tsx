@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { BookOpen, Bot, Check, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, Play, Settings2, Sparkles, Terminal, Upload, X } from 'lucide-react';
-import LatexEditor from './LatexEditor';
+import SourceEditor from './SourceEditor';
+import { defaultScripts, scriptFiles } from '../shared/scripts';
+import type { ArtifactSummary, ProjectScripts, ScriptLanguage } from '../shared/types';
 
 type ProjectSummary = { id: string; name: string; updatedAt: string; hasPdf: boolean };
-type Project = ProjectSummary & { latex: string };
+type Project = ProjectSummary & { latex: string; scripts: ProjectScripts };
 type Provider = 'llamafarm' | 'anthropic' | 'openai';
 type AiReply = { text: string; suggestedLatex: string | null };
 type Integrations = Record<Provider, { configured: boolean; model: string }> & { mcp: { configured: boolean } };
@@ -13,6 +15,11 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [latex, setLatex] = useState('');
+  const [scripts, setScripts] = useState<ProjectScripts>({ ...defaultScripts });
+  const [activeFile, setActiveFile] = useState<'latex' | ScriptLanguage>('latex');
+  const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
+  const [runBusy, setRunBusy] = useState(false);
+  const [outputTitle, setOutputTitle] = useState('COMPILE OUTPUT');
   const [projectName, setProjectName] = useState('');
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState('Ready');
@@ -41,6 +48,7 @@ export default function App() {
   const revision = useRef(0);
   const compilingRef = useRef(false);
   const latestEditRef = useRef({ id: '', source: '', name: '' });
+  const pendingScriptRef = useRef<{ id: string; language: ScriptLanguage; source: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const workbenchRef = useRef<HTMLDivElement>(null);
   const loadedTokenRef = useRef<string | null>(null);
@@ -93,6 +101,11 @@ export default function App() {
       if (dirty && project) {
         await api(`/api/projects/${project.id}`, { method: 'PUT', body: JSON.stringify({ latex, name: projectName }) });
       }
+      const pending = pendingScriptRef.current;
+      if (pending) {
+        await api(`/api/projects/${pending.id}/scripts/${pending.language}`, { method: 'PUT', body: JSON.stringify({ source: pending.source }) });
+        if (pendingScriptRef.current === pending) pendingScriptRef.current = null;
+      }
       const res = await api(`/api/projects/${id}`);
       const next = await res.json() as Project;
       revision.current++;
@@ -104,6 +117,9 @@ export default function App() {
       setProject(next);
       setProjectName(next.name);
       setLatex(next.latex);
+      setScripts(next.scripts || { ...defaultScripts });
+      setActiveFile('latex');
+      setArtifacts([]);
       setDirty(false);
       setDiagnostics('');
       setAiReply(null);
@@ -111,6 +127,9 @@ export default function App() {
       setStatus('Ready');
       sessionStorage.setItem('patex-last-project', next.id);
       void refreshPdf(next.id);
+      void api(`/api/projects/${next.id}/artifacts`).then(async response => {
+        if (activeProjectRef.current === next.id) setArtifacts(await response.json() as ArtifactSummary[]);
+      }).catch(() => {});
     } catch (e) { setStatus((e as Error).message); }
   }, [api, refreshPdf, dirty, project, latex, projectName]);
   useEffect(() => {
@@ -142,6 +161,20 @@ export default function App() {
     if (revision.current === editRevision) { setDirty(false); setStatus('Saved'); setProject(saved); }
     return saved;
   }, [api]);
+  const saveScript = useCallback(async (id: string, language: ScriptLanguage, source: string) => {
+    await api(`/api/projects/${id}/scripts/${language}`, { method: 'PUT', body: JSON.stringify({ source }) });
+    const pending = pendingScriptRef.current;
+    if (pending?.id === id && pending.language === language && pending.source === source) pendingScriptRef.current = null;
+    setStatus('Saved');
+  }, [api]);
+  useEffect(() => {
+    const pending = pendingScriptRef.current;
+    if (!pending || pending.id !== projectId) return;
+    const timer = window.setTimeout(() => {
+      void saveScript(pending.id, pending.language, pending.source).catch(e => setStatus(`Save failed: ${(e as Error).message}`));
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [scripts, projectId, saveScript]);
   useEffect(() => {
     if (!dirty || !projectId) return;
     const id = projectId;
@@ -156,6 +189,7 @@ export default function App() {
     compilingRef.current = true;
     setCompiling(true);
     setStatus('Compiling…');
+    setOutputTitle('COMPILE OUTPUT');
     try {
       await save(id, source, name, rev);
       const res = await api(`/api/projects/${id}/compile`, { method: 'POST' });
@@ -186,6 +220,64 @@ export default function App() {
   }, [latex, projectName, projectId, compile]);
   const edit = (text: string) => { setLatex(text); revision.current++; latestEditRef.current = { id: projectId || '', source: text, name: projectName }; setDirty(true); setStatus('Editing…'); };
   const rename = (text: string) => { setProjectName(text); revision.current++; latestEditRef.current = { id: projectId || '', source: latex, name: text }; setDirty(true); };
+  const editScript = (language: ScriptLanguage, source: string) => {
+    setScripts(current => ({ ...current, [language]: source }));
+    pendingScriptRef.current = { id: projectId || '', language, source };
+    setStatus('Editing…');
+  };
+  const selectFile = async (file: 'latex' | ScriptLanguage) => {
+    const pending = pendingScriptRef.current;
+    try {
+      if (pending) await saveScript(pending.id, pending.language, pending.source);
+      setActiveFile(file);
+      setShowDiagnostics(false);
+    } catch (e) { setStatus(`Save failed: ${(e as Error).message}`); }
+  };
+  const runScript = async (language: ScriptLanguage) => {
+    if (!project || runBusy) return;
+    setRunBusy(true);
+    setStatus(`Running ${scriptFiles[language]}…`);
+    setOutputTitle(`${scriptFiles[language]} OUTPUT`);
+    try {
+      const source = scripts[language];
+      const response = await api(`/api/projects/${project.id}/run/${language}`, { method: 'POST', body: JSON.stringify({ source }) });
+      const result = await response.json() as { ok: boolean; exitCode: number | null; stdout: string; stderr: string; artifacts: ArtifactSummary[] };
+      if (pendingScriptRef.current?.id === project.id && pendingScriptRef.current.language === language && pendingScriptRef.current.source === source) pendingScriptRef.current = null;
+      setDiagnostics([result.stdout, result.stderr].filter(Boolean).join('\n') || (result.ok ? 'Finished with no console output.' : `Exited with code ${result.exitCode}.`));
+      setShowDiagnostics(true);
+      setArtifacts(result.artifacts);
+      setStatus(result.ok ? `${scriptFiles[language]} finished` : `${scriptFiles[language]} failed`);
+      if (result.ok && result.artifacts.length) void compile(project.id, latex, projectName, revision.current);
+    } catch (e) { setDiagnostics((e as Error).message); setShowDiagnostics(true); setStatus(`Run failed: ${(e as Error).message}`); }
+    finally { setRunBusy(false); }
+  };
+  const insertArtifact = (name: string) => {
+    const image = /\.(?:png|jpe?g|pdf)$/i.test(name);
+    if (!image && !/\.tex$/i.test(name)) return;
+    const command = image ? `\\includegraphics[width=0.8\\linewidth]{assets/${name}}` : `\\input{assets/${name}}`;
+    let source = latex;
+    if (image && !/\\usepackage(?:\[[^\]]*\])?\{graphicx\}/.test(source)) source = source.replace(/(\\documentclass[^\n]*\n)/, '$1\\usepackage{graphicx}\n');
+    source = source.includes('\\end{document}') ? source.replace('\\end{document}', `${command}\n\\end{document}`) : `${source}\n${command}\n`;
+    edit(source);
+    void selectFile('latex');
+  };
+  const downloadArtifact = async (name: string) => {
+    if (!project) return;
+    try {
+      const response = await api(`/api/projects/${project.id}/artifacts/${encodeURIComponent(name)}`);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url; link.download = name; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setStatus((e as Error).message); }
+  };
+  const deleteArtifact = async (name: string) => {
+    if (!project || !window.confirm(`Delete generated file ${name}?`)) return;
+    try {
+      await api(`/api/projects/${project.id}/artifacts/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      setArtifacts(current => current.filter(file => file.name !== name));
+      setStatus(`${name} deleted`);
+    } catch (e) { setStatus((e as Error).message); }
+  };
   const downloadText = () => {
     if (!project) return;
     const blob = new Blob([latex], { type: 'text/x-tex' });
@@ -255,10 +347,11 @@ export default function App() {
         {projects.length === 0 && <p className="empty-sidebar">Create a project to begin writing.</p>}
       </aside>
       <main className="editor-workspace">
-        <div className="pane-head"><span><Code2 size={16}/> LATEX SOURCE</span><div><button className="text-button" onClick={() => fileInput.current?.click()} disabled={!project}><Upload size={15}/> Import</button><input ref={fileInput} hidden type="file" accept=".tex,text/plain" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadTex(f); e.currentTarget.value = ''; }}/><button className="text-button" onClick={downloadText} disabled={!project}><Download size={14}/> .tex</button><span className="tab-label">main.tex</span></div></div>
-        {creating ? <div className="placeholder" role="status"><LoaderCircle className="spin" size={32}/><h2>Creating project…</h2></div> : project ? <div className="editor-wrapper"><LatexEditor key={project.id} value={latex} onChange={edit} onSave={() => { void save(project.id, latex, projectName, revision.current); }} onCompile={() => { void compile(project.id, latex, projectName, revision.current); }} requestCompletion={requestCompletion} onCompletionStatus={setInlineAiStatus}/></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
-        {showDiagnostics && <div className="diagnostics"><div className="diagnostics-head"><Terminal size={14}/> COMPILE OUTPUT <button onClick={() => setShowDiagnostics(false)} aria-label="Close compile output"><X size={15}/></button></div><pre>{diagnostics || 'No output yet'}</pre></div>}
-        <div className="editor-footer"><span>LaTeX · UTF-8</span><span>{latex.split('\n').length} lines</span><span>{inlineAiStatus === 'waiting' ? 'AI suggesting…' : inlineAiStatus === 'unavailable' ? 'AI busy · LaTeX completion available' : 'Tab accepts inline suggestions'}</span><button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>Ctrl/Cmd+Enter compile</span></div>
+        <div className="pane-head file-head"><div className="file-tabs" role="tablist" aria-label="Project files">{(['latex', 'javascript', 'python', 'r'] as const).map(file => <button key={file} role="tab" aria-selected={activeFile === file} className={activeFile === file ? 'file-tab selected' : 'file-tab'} onClick={() => void selectFile(file)} disabled={!project || creating}>{file === 'latex' ? 'main.tex' : scriptFiles[file]}</button>)}</div><div>{activeFile === 'latex' ? <><button className="text-button" onClick={() => fileInput.current?.click()} disabled={!project}><Upload size={15}/> Import</button><input ref={fileInput} hidden type="file" accept=".tex,text/plain" onChange={e => { const f = e.target.files?.[0]; if (f) void uploadTex(f); e.currentTarget.value = ''; }}/><button className="text-button" onClick={downloadText} disabled={!project}><Download size={14}/> .tex</button></> : <button className="primary run-button" onClick={() => void runScript(activeFile)} disabled={!project || runBusy}><Play size={13}/>{runBusy ? 'Running…' : 'Run'}</button>}</div></div>
+        {creating ? <div className="placeholder" role="status"><LoaderCircle className="spin" size={32}/><h2>Creating project…</h2></div> : project ? <div className="editor-wrapper"><SourceEditor key={`${project.id}:${activeFile}`} language={activeFile} value={activeFile === 'latex' ? latex : scripts[activeFile]} onChange={activeFile === 'latex' ? edit : source => editScript(activeFile, source)} onSave={() => { if (activeFile === 'latex') void save(project.id, latex, projectName, revision.current); else void saveScript(project.id, activeFile, scripts[activeFile]); }} onExecute={() => { if (activeFile === 'latex') void compile(project.id, latex, projectName, revision.current); else void runScript(activeFile); }} requestCompletion={activeFile === 'latex' ? requestCompletion : undefined} onCompletionStatus={activeFile === 'latex' ? setInlineAiStatus : undefined}/></div> : <div className="placeholder"><Code2 size={42}/><h2>Start writing with Patex</h2><p>Create a project to edit LaTeX and generate PDFs.</p><button className="primary" onClick={() => void createProject()}>Create project</button></div>}
+        {showDiagnostics && <div className="diagnostics"><div className="diagnostics-head"><Terminal size={14}/> {outputTitle} <button onClick={() => setShowDiagnostics(false)} aria-label="Close output"><X size={15}/></button></div><pre>{diagnostics || 'No output yet'}</pre></div>}
+        {activeFile !== 'latex' && artifacts.length > 0 && <div className="artifact-tray"><strong>GENERATED FILES</strong><div className="artifact-list">{artifacts.map(file => <div className="artifact-item" key={file.name}><span>{file.name}</span>{/\.(?:tex|png|jpe?g|pdf)$/i.test(file.name) && <button onClick={() => insertArtifact(file.name)} title={`Insert ${file.name} into LaTeX`}>Insert</button>}<button onClick={() => void downloadArtifact(file.name)} title={`Download ${file.name}`}>Save</button><button onClick={() => void deleteArtifact(file.name)} title={`Delete ${file.name}`}>×</button></div>)}</div></div>}
+        <div className="editor-footer"><span>{activeFile === 'latex' ? 'LaTeX' : activeFile.toUpperCase()} · UTF-8</span><span>{(activeFile === 'latex' ? latex : scripts[activeFile]).split('\n').length} lines</span>{activeFile === 'latex' && <span>{inlineAiStatus === 'waiting' ? 'AI suggesting…' : inlineAiStatus === 'unavailable' ? 'AI busy · LaTeX completion available' : 'Tab accepts inline suggestions'}</span>}<button className="text-button" onClick={() => setShowDiagnostics(x => !x)}><Terminal size={14}/> Logs</button><span>Ctrl/Cmd+Enter {activeFile === 'latex' ? 'compile' : 'run'}</span></div>
       </main>
       <div className="splitter" role="separator" aria-label="Resize editor and PDF panels" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={75} aria-valuenow={editorWidth} tabIndex={0}
         onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setResizing(true); }}

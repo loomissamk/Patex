@@ -1,16 +1,27 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { CompileResult } from '../shared/types.js';
+import type { Artifact, CompileResult } from '../shared/types.js';
+import { artifactName } from '../shared/artifacts.js';
 const execFileAsync = promisify(execFile);
 const MAX_SOURCE = 200_000;
-export async function compileLatex(latex: string): Promise<CompileResult> {
+export async function compileLatex(latex: string, assets: Artifact[] = []): Promise<CompileResult> {
   if (typeof latex !== 'string' || Buffer.byteLength(latex, 'utf8') > MAX_SOURCE) return { ok: false, log: 'LaTeX source is too large (200 KB max).' };
+  if (!Array.isArray(assets) || assets.length > 12) return { ok: false, log: 'Too many assets.' };
   const workdir = await mkdtemp(path.join(tmpdir(), 'patex-'));
   try {
     await writeFile(path.join(workdir, 'main.tex'), latex, { mode: 0o600 });
+    await mkdir(path.join(workdir, 'assets'), { mode: 0o700 });
+    let total = 0;
+    for (const asset of assets) {
+      if (!asset || typeof asset.name !== 'string' || !artifactName.test(asset.name) || typeof asset.base64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(asset.base64)) return { ok: false, log: 'Invalid asset.' };
+      const data = Buffer.from(asset.base64, 'base64');
+      total += data.length;
+      if (data.length > 512 * 1024 || total > 2 * 1024 * 1024 || data.toString('base64') !== asset.base64) return { ok: false, log: 'Asset size or encoding is invalid.' };
+      await writeFile(path.join(workdir, 'assets', asset.name), data, { mode: 0o600 });
+    }
     let logs = '';
     for (let pass = 0; pass < 2; pass++) {
       try {

@@ -23,4 +23,14 @@ describe('ProjectStore', () => {
     expect((await store.readPdf(p.id)).toString()).toBe('%PDF-test');
     expect((await store.get(p.id)).hasPdf).toBe(true);
   });
+  test('persists scripts and generated artifacts for a project', async () => {
+    const p = await store.create('Analysis');
+    expect((await store.get(p.id)).scripts.r).toContain('png(');
+    await store.updateScript(p.id, 'javascript', 'console.log(42)');
+    await store.saveArtifacts(p.id, [{ name: 'answer.tex', base64: Buffer.from('42').toString('base64') }]);
+    expect((await store.get(p.id)).scripts.javascript).toBe('console.log(42)');
+    expect((await store.compileAssets(p.id))[0].name).toBe('answer.tex');
+    await store.deleteArtifact(p.id, 'answer.tex');
+    expect(await store.listArtifacts(p.id)).toHaveLength(0);
+  });
 });

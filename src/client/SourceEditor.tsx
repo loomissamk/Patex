@@ -5,6 +5,10 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { acceptCompletion, autocompletion, type CompletionContext } from '@codemirror/autocomplete';
 import { StreamLanguage, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
+import { r } from '@codemirror/legacy-modes/mode/r';
+import { javascript as javascriptLanguage } from '@codemirror/lang-javascript';
+import { python as pythonLanguage } from '@codemirror/lang-python';
+import type { ScriptLanguage } from '../shared/types';
 
 type Ghost = { pos: number; text: string } | null;
 const setGhost = StateEffect.define<Ghost>();
@@ -46,19 +50,20 @@ function latexCompletions(context: CompletionContext) {
 }
 
 type Props = {
+  language: 'latex' | ScriptLanguage;
   value: string;
   onChange: (source: string) => void;
   onSave: () => void;
-  onCompile: () => void;
-  requestCompletion: (prefix: string, suffix: string, signal: AbortSignal) => Promise<string>;
-  onCompletionStatus: (status: 'waiting' | 'ready' | 'unavailable') => void;
+  onExecute: () => void;
+  requestCompletion?: (prefix: string, suffix: string, signal: AbortSignal) => Promise<string>;
+  onCompletionStatus?: (status: 'waiting' | 'ready' | 'unavailable') => void;
 };
 
-export default function LatexEditor({ value, onChange, onSave, onCompile, requestCompletion, onCompletionStatus }: Props) {
+export default function SourceEditor({ language, value, onChange, onSave, onExecute, requestCompletion, onCompletionStatus }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onSave, onCompile, requestCompletion, onCompletionStatus });
-  callbacks.current = { onChange, onSave, onCompile, requestCompletion, onCompletionStatus };
+  const callbacks = useRef({ onChange, onSave, onExecute, requestCompletion, onCompletionStatus });
+  callbacks.current = { onChange, onSave, onExecute, requestCompletion, onCompletionStatus };
 
   useEffect(() => {
     if (!host.current) return;
@@ -72,9 +77,10 @@ export default function LatexEditor({ value, onChange, onSave, onCompile, reques
         doc: value,
         extensions: [
           lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), history(),
-          StreamLanguage.define(stex), syntaxHighlighting(defaultHighlightStyle),
-          autocompletion({ override: [latexCompletions] }), ghostField,
-          EditorView.contentAttributes.of({ 'aria-label': 'LaTeX source editor', spellcheck: 'false' }),
+          language === 'latex' ? StreamLanguage.define(stex) : language === 'javascript' ? javascriptLanguage() : language === 'python' ? pythonLanguage() : StreamLanguage.define(r),
+          syntaxHighlighting(defaultHighlightStyle),
+          language === 'latex' ? autocompletion({ override: [latexCompletions] }) : autocompletion(), ghostField,
+          EditorView.contentAttributes.of({ 'aria-label': language === 'latex' ? 'LaTeX source editor' : `${language} source editor`, spellcheck: 'false' }),
           Prec.high(keymap.of([
             { key: 'Tab', run(view) {
               const ghost = view.state.field(ghostField);
@@ -87,7 +93,7 @@ export default function LatexEditor({ value, onChange, onSave, onCompile, reques
               view.dispatch({ effects: setGhost.of(null) }); return true;
             } },
             { key: 'Mod-s', run() { callbacks.current.onSave(); return true; } },
-            { key: 'Mod-Enter', run() { callbacks.current.onCompile(); return true; } },
+            { key: 'Mod-Enter', run() { callbacks.current.onExecute(); return true; } },
           ])),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.updateListener.of(update => {
@@ -98,6 +104,7 @@ export default function LatexEditor({ value, onChange, onSave, onCompile, reques
             if (!update.docChanged) return;
             const source = update.state.doc.toString();
             callbacks.current.onChange(source);
+            if (language !== 'latex' || !callbacks.current.requestCompletion) return;
             const cursor = update.state.selection.main.head;
             const beforeCursor = source.slice(0, cursor);
             if (Date.now() < retryAfter || cursor < 20 || update.state.doc.lineAt(cursor).to !== cursor ||
@@ -106,21 +113,21 @@ export default function LatexEditor({ value, onChange, onSave, onCompile, reques
             timer = window.setTimeout(async () => {
               const requestController = new AbortController();
               controller = requestController;
-              callbacks.current.onCompletionStatus('waiting');
+              callbacks.current.onCompletionStatus?.('waiting');
               try {
-                const completion = await callbacks.current.requestCompletion(source.slice(Math.max(0, cursor - 3000), cursor), source.slice(cursor, cursor + 1000), requestController.signal);
+                const completion = await callbacks.current.requestCompletion!(source.slice(Math.max(0, cursor - 3000), cursor), source.slice(cursor, cursor + 1000), requestController.signal);
                 const text = completion.split('\n')[0].slice(0, 160);
                 if (text && currentSequence === sequence && view.state.doc.toString() === source && view.state.selection.main.head === cursor) {
                   view.dispatch({ effects: setGhost.of({ pos: cursor, text }) });
-                  callbacks.current.onCompletionStatus('ready');
+                  callbacks.current.onCompletionStatus?.('ready');
                 } else if (!text && currentSequence === sequence) {
                   retryAfter = Date.now() + 60000;
-                  callbacks.current.onCompletionStatus('unavailable');
+                  callbacks.current.onCompletionStatus?.('unavailable');
                 }
               } catch {
                 if (!requestController.signal.aborted) {
                   retryAfter = Date.now() + 60000;
-                  callbacks.current.onCompletionStatus('unavailable');
+                  callbacks.current.onCompletionStatus?.('unavailable');
                 }
               }
             }, 1200);
