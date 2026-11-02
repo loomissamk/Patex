@@ -4,6 +4,14 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 
 ## Build order and acceptance checks
 
+### Working branch milestone
+
+- [x] Preserve old TeX project data while adding `main.Rmd` and `main.qmd` project formats and source tabs.
+- [x] Render R chunks, inline R values, mathematics, and an R plot into a PDF in the V100 staging image.
+- [x] Store `references.bib` and build a cited Rmd PDF and a cited native TeX PDF in staging.
+- [x] Add opt-in local accepted/rejected AI feedback records with export and deletion APIs; no model-training transfer.
+- [ ] Verify browser creation/edit/preview and feedback controls through Nginx, then deploy the branch.
+
 ### 1. Document-first authoring
 
 - [ ] Keep existing `main.tex` projects working unchanged. Add `main.Rmd`/`main.qmd` documents as first-class project sources; import the user's existing files without silently rewriting them.
@@ -34,4 +42,4 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 
 ## Current baseline
 
-Patex currently auto-compiles a single `main.tex` after a 2.4-second pause and has separate R, Python, and JavaScript tabs with manual artifact insertion. It has no first-class Rmd/Qmd document, bibliography workflow, or opt-in human-feedback dataset. Do not describe those items as implemented until the checks above pass in the deployed browser app and a clean export.
+The deployed `main` build currently auto-compiles `main.tex` after a 2.4-second pause and has separate R, Python, and JavaScript tabs with manual artifact insertion. This branch adds the first literate-document, bibliography, and feedback slice. The full publishing and consented evaluation workflow above remains open until the browser, source export, and isolation checks pass.

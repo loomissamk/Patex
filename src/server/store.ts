@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, writeFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { defaultLatex } from '../shared/template.js';
+import { defaultLatex, defaultQmd, defaultRmd } from '../shared/template.js';
 import { defaultScripts } from '../shared/scripts.js';
 import { artifactName } from '../shared/artifacts.js';
-import type { Artifact, ArtifactSummary, Project, ProjectSummary, ScriptLanguage } from '../shared/types.js';
+import type { Artifact, ArtifactSummary, DocumentFormat, FeedbackEvent, Project, ProjectSummary, ScriptLanguage } from '../shared/types.js';
 
 const validId = /^[0-9a-f-]{36}$/;
 export class ProjectStore {
@@ -22,18 +22,19 @@ export class ProjectStore {
     }));
     return projects.filter((p): p is ProjectSummary => p !== null).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
-  async create(name = 'Untitled Project'): Promise<Project> {
+  async create(name = 'Untitled Project', format: DocumentFormat = 'tex'): Promise<Project> {
     const id = randomUUID();
     const dir = this.projectDir(id);
     await mkdir(dir, { recursive: true });
-    const project: Project = { id, name: name.trim().slice(0, 100) || 'Untitled Project', latex: defaultLatex, scripts: { ...defaultScripts }, updatedAt: new Date().toISOString(), hasPdf: false };
+    const source = format === 'rmd' ? defaultRmd : format === 'qmd' ? defaultQmd : defaultLatex;
+    const project: Project = { id, name: name.trim().slice(0, 100) || 'Untitled Project', latex: source, format, bibliography: '', scripts: { ...defaultScripts }, feedbackEnabled: false, updatedAt: new Date().toISOString(), hasPdf: false };
     await this.put(project);
     return project;
   }
   async get(id: string): Promise<Project> {
     const obj = JSON.parse(await readFile(path.join(this.projectDir(id), 'project.json'), 'utf8')) as Project;
     const hasPdf = await stat(path.join(this.projectDir(id), 'document.pdf')).then(() => true, () => false);
-    return { ...obj, scripts: { ...defaultScripts, ...obj.scripts }, hasPdf };
+    return { ...obj, format: obj.format || 'tex', bibliography: obj.bibliography || '', feedbackEnabled: obj.feedbackEnabled === true, scripts: { ...defaultScripts, ...obj.scripts }, hasPdf };
   }
   async update(id: string, input: { latex?: string; name?: string }): Promise<Project> {
     const current = await this.get(id);
@@ -66,6 +67,43 @@ export class ProjectStore {
     await rename(temp, path.join(dir, 'document.pdf'));
   }
   async readPdf(id: string): Promise<Buffer> { return readFile(path.join(this.projectDir(id), 'document.pdf')); }
+  async updateBibliography(id: string, bibliography: string): Promise<Project> {
+    const project = { ...await this.get(id), bibliography, updatedAt: new Date().toISOString() };
+    await this.put(project);
+    return project;
+  }
+  async setFeedbackEnabled(id: string, enabled: boolean): Promise<Project> {
+    const project = { ...await this.get(id), feedbackEnabled: enabled, updatedAt: new Date().toISOString() };
+    await this.put(project);
+    return project;
+  }
+  async readFeedback(id: string): Promise<FeedbackEvent[]> {
+    await this.get(id);
+    const file = path.join(this.projectDir(id), 'feedback.json');
+    return readFile(file, 'utf8').then(text => JSON.parse(text) as FeedbackEvent[], error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    });
+  }
+  async recordFeedback(id: string, input: Omit<FeedbackEvent, 'id' | 'at'>): Promise<FeedbackEvent> {
+    const project = await this.get(id);
+    if (!project.feedbackEnabled) throw new Error('Feedback capture is off');
+    const events = await this.readFeedback(id);
+    const event: FeedbackEvent = { ...input, id: randomUUID(), at: new Date().toISOString() };
+    const updated = [...events, event].slice(-50);
+    if (Buffer.byteLength(JSON.stringify(updated), 'utf8') > 2_000_000) throw new Error('Feedback storage limit exceeded');
+    const dir = this.projectDir(id);
+    const temp = path.join(dir, `.feedback-${randomUUID()}.tmp`);
+    await writeFile(temp, JSON.stringify(updated), { mode: 0o600 });
+    await rename(temp, path.join(dir, 'feedback.json'));
+    return event;
+  }
+  async deleteFeedback(id: string): Promise<void> {
+    await this.get(id);
+    await unlink(path.join(this.projectDir(id), 'feedback.json')).catch(error => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    });
+  }
   async updateScript(id: string, language: ScriptLanguage, source: string): Promise<Project> {
     const current = await this.get(id);
     const updated = { ...current, scripts: { ...current.scripts, [language]: source }, updatedAt: new Date().toISOString() };

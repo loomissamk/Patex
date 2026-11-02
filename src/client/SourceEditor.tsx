@@ -7,6 +7,7 @@ import { StreamLanguage, defaultHighlightStyle, syntaxHighlighting } from '@code
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { r } from '@codemirror/legacy-modes/mode/r';
 import { javascript as javascriptLanguage } from '@codemirror/lang-javascript';
+import { markdown } from '@codemirror/lang-markdown';
 import { python as pythonLanguage } from '@codemirror/lang-python';
 import type { ScriptLanguage } from '../shared/types';
 
@@ -50,7 +51,7 @@ function latexCompletions(context: CompletionContext) {
 }
 
 type Props = {
-  language: 'latex' | ScriptLanguage;
+  language: 'latex' | 'rmd' | 'qmd' | 'bibliography' | ScriptLanguage;
   value: string;
   onChange: (source: string) => void;
   onSave: () => void;
@@ -77,10 +78,10 @@ export default function SourceEditor({ language, value, onChange, onSave, onExec
         doc: value,
         extensions: [
           lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), history(),
-          language === 'latex' ? StreamLanguage.define(stex) : language === 'javascript' ? javascriptLanguage() : language === 'python' ? pythonLanguage() : StreamLanguage.define(r),
+          language === 'latex' || language === 'bibliography' ? StreamLanguage.define(stex) : language === 'rmd' || language === 'qmd' ? markdown() : language === 'javascript' ? javascriptLanguage() : language === 'python' ? pythonLanguage() : StreamLanguage.define(r),
           syntaxHighlighting(defaultHighlightStyle),
           language === 'latex' ? autocompletion({ override: [latexCompletions] }) : autocompletion(), ghostField,
-          EditorView.contentAttributes.of({ 'aria-label': language === 'latex' ? 'LaTeX source editor' : `${language} source editor`, spellcheck: 'false' }),
+          EditorView.contentAttributes.of({ 'aria-label': language === 'latex' ? 'LaTeX source editor' : language === 'bibliography' ? 'BibTeX bibliography editor' : language === 'rmd' || language === 'qmd' ? 'Document source editor' : `${language} source editor`, spellcheck: 'false' }),
           Prec.high(keymap.of([
             { key: 'Tab', run(view) {
               const ghost = view.state.field(ghostField);
@@ -104,11 +105,11 @@ export default function SourceEditor({ language, value, onChange, onSave, onExec
             if (!update.docChanged) return;
             const source = update.state.doc.toString();
             callbacks.current.onChange(source);
-            if (language !== 'latex' || !callbacks.current.requestCompletion) return;
+            if (!['latex', 'rmd', 'qmd'].includes(language) || !callbacks.current.requestCompletion) return;
             const cursor = update.state.selection.main.head;
             const beforeCursor = source.slice(0, cursor);
-            if (Date.now() < retryAfter || cursor < 20 || update.state.doc.lineAt(cursor).to !== cursor ||
-              !beforeCursor.includes('\\begin{document}') || beforeCursor.lastIndexOf('\\end{document}') > beforeCursor.lastIndexOf('\\begin{document}')) return;
+            if (Date.now() < retryAfter || cursor < 20 || update.state.doc.lineAt(cursor).to !== cursor) return;
+            if (language === 'latex' && (!beforeCursor.includes('\\begin{document}') || beforeCursor.lastIndexOf('\\end{document}') > beforeCursor.lastIndexOf('\\begin{document}'))) return;
             const currentSequence = sequence;
             timer = window.setTimeout(async () => {
               const requestController = new AbortController();

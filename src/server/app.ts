@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { ProjectStore } from './store.js';
 import { askAI, completeAI } from './ai.js';
 import { createPatexMcpServer } from './mcp-server.js';
-import type { AiProvider, CompileResult, RunResult, ScriptLanguage } from '../shared/types.js';
+import type { AiProvider, CompileResult, DocumentFormat, RunResult, ScriptLanguage } from '../shared/types.js';
 import { artifactName } from '../shared/artifacts.js';
 
 export function createApp(store: ProjectStore, options: { token?: string; compilerUrl?: string } = {}) {
@@ -59,7 +59,9 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
   app.post('/api/projects', async (req, res, next) => {
     try {
       if (req.body.name != null && typeof req.body.name !== 'string') { res.status(400).json({ error: 'Invalid name' }); return; }
-      res.status(201).json(await store.create(req.body.name));
+      const format = req.body.format || 'tex';
+      if (!['tex', 'rmd', 'qmd'].includes(format)) { res.status(400).json({ error: 'Invalid document format' }); return; }
+      res.status(201).json(await store.create(req.body.name, format as DocumentFormat));
     } catch (err) { next(err); }
   });
   app.get('/api/projects/:id', async (req, res, next) => {
@@ -73,6 +75,37 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       }
       res.json(await store.update(req.params.id, { latex, name }));
     } catch (err) { next(err); }
+  });
+  app.put('/api/projects/:id/bibliography', async (req, res, next) => {
+    try {
+      const bibliography = req.body?.bibliography;
+      if (typeof bibliography !== 'string' || Buffer.byteLength(bibliography, 'utf8') > 100_000) { res.status(400).json({ error: 'Invalid bibliography' }); return; }
+      const project = await store.updateBibliography(req.params.id, bibliography);
+      res.json({ bibliography: project.bibliography, updatedAt: project.updatedAt });
+    } catch (err) { next(err); }
+  });
+  app.put('/api/projects/:id/feedback-settings', async (req, res, next) => {
+    try {
+      if (typeof req.body?.enabled !== 'boolean') { res.status(400).json({ error: 'Invalid feedback setting' }); return; }
+      const project = await store.setFeedbackEnabled(req.params.id, req.body.enabled);
+      res.json({ enabled: project.feedbackEnabled });
+    } catch (err) { next(err); }
+  });
+  app.get('/api/projects/:id/feedback', async (req, res, next) => {
+    try { res.set('cache-control', 'no-store').json(await store.readFeedback(req.params.id)); } catch (err) { next(err); }
+  });
+  app.post('/api/projects/:id/feedback', async (req, res, next) => {
+    try {
+      const { provider, decision, sourceBefore, suggestion, sourceAfter } = req.body || {};
+      if (!['llamafarm', 'anthropic', 'openai'].includes(provider) || !['accepted', 'rejected'].includes(decision) ||
+        [sourceBefore, suggestion, sourceAfter].some(value => typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 30_000)) {
+        res.status(400).json({ error: 'Invalid feedback event' }); return;
+      }
+      res.status(201).json(await store.recordFeedback(req.params.id, { provider, decision, sourceBefore, suggestion, sourceAfter }));
+    } catch (err) { next(err); }
+  });
+  app.delete('/api/projects/:id/feedback', async (req, res, next) => {
+    try { await store.deleteFeedback(req.params.id); res.status(204).end(); } catch (err) { next(err); }
   });
   app.put('/api/projects/:id/scripts/:language', async (req, res, next) => {
     try {
@@ -122,16 +155,17 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
       if (!options.compilerUrl) { res.status(503).json({ error: 'Compiler is not configured' }); return; }
       const project = await store.get(req.params.id);
       const startedSource = project.latex;
+      const startedBibliography = project.bibliography;
       const result = await fetch(`${options.compilerUrl}/compile`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ latex: startedSource, assets: await store.compileAssets(req.params.id) }), signal: AbortSignal.timeout(65000),
+        body: JSON.stringify({ latex: startedSource, format: project.format, bibliography: project.bibliography, assets: await store.compileAssets(req.params.id) }), signal: AbortSignal.timeout(130000),
       });
       if (!result.ok) { res.status(502).json({ error: `Compiler failed: ${result.status}` }); return; }
       const compiled = await result.json() as CompileResult;
       if (compiled.ok && compiled.pdfBase64) {
         // Avoid displaying stale output after a concurrent edit.
         const latest = await store.get(req.params.id);
-        if (latest.latex !== startedSource) { res.status(409).json({ error: 'Source changed during compilation; compile again' }); return; }
+        if (latest.latex !== startedSource || latest.bibliography !== startedBibliography) { res.status(409).json({ error: 'Source changed during compilation; compile again' }); return; }
         const bytes = Buffer.from(compiled.pdfBase64, 'base64');
         if (bytes.length > 5_000_000 || bytes.subarray(0, 5).toString() !== '%PDF-') { res.status(502).json({ error: 'Invalid PDF returned by compiler' }); return; }
         await store.savePdf(req.params.id, bytes);
@@ -146,24 +180,25 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
         res.status(400).json({ error: 'Invalid provider or prompt' }); return;
       }
       const project = await store.get(projectId);
-      res.json(await askAI(provider as AiProvider, prompt, project.latex));
+      res.json(await askAI(provider as AiProvider, prompt, project.latex, project.format));
     } catch (err) { next(err); }
   });
   app.post('/api/complete', async (req, res, next) => {
     const controller = new AbortController();
     res.on('close', () => controller.abort());
     try {
-      const { provider, prefix, suffix } = req.body;
-      if (!['llamafarm', 'anthropic', 'openai'].includes(provider) || typeof prefix !== 'string' || typeof suffix !== 'string' || prefix.length > 4000 || suffix.length > 2000) {
+      const { provider, prefix, suffix, format = 'tex' } = req.body;
+      if (!['llamafarm', 'anthropic', 'openai'].includes(provider) || !['tex', 'rmd', 'qmd'].includes(format) || typeof prefix !== 'string' || typeof suffix !== 'string' || prefix.length > 4000 || suffix.length > 2000) {
         res.status(400).json({ error: 'Invalid completion request' }); return;
       }
-      res.json({ text: await completeAI(provider as AiProvider, prefix, suffix, controller.signal) });
+      res.json({ text: await completeAI(provider as AiProvider, prefix, suffix, format as DocumentFormat, controller.signal) });
     } catch (err) { if (!controller.signal.aborted) next(err); }
   });
   app.use('/api', ((_err, _req, res, _next) => {
     const e = _err as NodeJS.ErrnoException;
     if (e.code === 'ENOENT' || e.message === 'Invalid project ID') res.status(404).json({ error: 'Project or artifact not found' });
-    else if (e.message.startsWith('Invalid artifact') || e.message.includes('artifact limit') || e.message.includes('Artifact exceeds')) res.status(400).json({ error: e.message });
+    else if (e.message === 'Feedback capture is off') res.status(403).json({ error: e.message });
+    else if (e.message.startsWith('Invalid artifact') || e.message.includes('artifact limit') || e.message.includes('Artifact exceeds') || e.message === 'Feedback storage limit exceeded') res.status(400).json({ error: e.message });
     else res.status(500).json({ error: e.message.startsWith('Provider') || e.message.includes('configured') ? e.message : 'Internal error' });
   }) satisfies ErrorRequestHandler);
   // Serve Vite's production build; dev mode uses Vite directly.

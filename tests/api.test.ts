@@ -19,6 +19,13 @@ describe('HTTP API', () => {
   test('rejects invalid request data and path IDs', async () => {
     const app = createApp(new ProjectStore(root));
     await request(app).post('/api/projects').send({ name: 7 }).expect(400);
+    await request(app).post('/api/projects').send({ name: 'Bad', format: 'docx' }).expect(400);
+    const rmd = await request(app).post('/api/projects').send({ name: 'Research', format: 'rmd' }).expect(201);
+    expect(rmd.body.format).toBe('rmd');
+    expect(rmd.body.latex).toContain('```{r}');
+    await request(app).put(`/api/projects/${rmd.body.id}/bibliography`).send({ bibliography: '@article{key, title={Paper}}' }).expect(200);
+    const stored = await request(app).get(`/api/projects/${rmd.body.id}`).expect(200);
+    expect(stored.body.bibliography).toContain('@article{key');
     await request(app).get('/api/projects/not-a-uuid').expect(404);
   });
   test('MCP endpoint authenticates and lists Patex tools', async () => {
@@ -30,5 +37,17 @@ describe('HTTP API', () => {
     expect(response.text).toContain('patex_update_script');
     expect(response.text).toContain('patex_run_script');
     expect(response.text).toContain('patex_list_artifacts');
+  });
+  test('requires explicit consent before storing AI feedback', async () => {
+    const app = createApp(new ProjectStore(root));
+    const created = await request(app).post('/api/projects').send({ name: 'Paper' }).expect(201);
+    const id = created.body.id as string;
+    const event = { provider: 'llamafarm', decision: 'rejected', sourceBefore: 'a', suggestion: 'b', sourceAfter: 'a' };
+    await request(app).post(`/api/projects/${id}/feedback`).send(event).expect(403);
+    await request(app).put(`/api/projects/${id}/feedback-settings`).send({ enabled: true }).expect(200);
+    await request(app).post(`/api/projects/${id}/feedback`).send(event).expect(201);
+    const exported = await request(app).get(`/api/projects/${id}/feedback`).expect(200);
+    expect(exported.body).toHaveLength(1);
+    await request(app).delete(`/api/projects/${id}/feedback`).expect(204);
   });
 });

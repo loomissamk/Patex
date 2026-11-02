@@ -1,10 +1,14 @@
-import { completeAI, extractLatex } from '../src/server/ai.js';
+import { completeAI, extractDocument, extractLatex } from '../src/server/ai.js';
 describe('AI suggestions', () => {
   test('extracts code without silently writing', () => {
     expect(extractLatex('Try this:\n```latex\n\\begin{document}\nHi\n```')).toBe('\\begin{document}\nHi');
   });
   test('does not accept unstructured text as source', () => {
     expect(extractLatex('This formula needs an amsmath package.')).toBeNull();
+  });
+  test('keeps suggested document format consistent', () => {
+    expect(extractDocument('```rmd\n# Result\n```', 'rmd')).toBe('# Result');
+    expect(extractDocument('```latex\n\\section{Wrong format}\n```', 'rmd')).toBeNull();
   });
   test('returns only provider completion text for insertion at the cursor', async () => {
     const previousUrl = process.env.LLAMAFARM_CHAT_URL;

@@ -9,8 +9,9 @@ export function createPatexMcpServer(store: ProjectStore, compilerUrl: string): 
   const server = new McpServer({ name: 'patex', version: '0.1.0' });
   server.tool('patex_list_projects', 'List Patex projects', {}, async () => result(await store.list()));
   server.tool('patex_get_project', 'Read LaTeX source from a Patex project', { id: z.string().uuid() }, async ({ id }) => result(await store.get(id)));
-  server.tool('patex_create_project', 'Create a LaTeX project', { name: z.string().max(100) }, async ({ name }) => result(await store.create(name)));
+  server.tool('patex_create_project', 'Create a TeX, R Markdown, or Quarto document', { name: z.string().max(100), format: z.enum(['tex', 'rmd', 'qmd']).optional() }, async ({ name, format }) => result(await store.create(name, format || 'tex')));
   server.tool('patex_update_latex', 'Replace LaTeX source in a project', { id: z.string().uuid(), latex: z.string().max(200000) }, async ({ id, latex }) => result(await store.update(id, { latex })));
+  server.tool('patex_update_bibliography', 'Save BibTeX entries in references.bib', { id: z.string().uuid(), bibliography: z.string().max(100000) }, async ({ id, bibliography }) => result(await store.updateBibliography(id, bibliography)));
   const language = z.enum(['javascript', 'python', 'r']);
   server.tool('patex_update_script', 'Save JavaScript, Python, or R source in a project', { id: z.string().uuid(), language, source: z.string().max(100000) }, async ({ id, language: selected, source }) => {
     const project = await store.updateScript(id, selected, source);
@@ -30,12 +31,13 @@ export function createPatexMcpServer(store: ProjectStore, compilerUrl: string): 
   server.tool('patex_compile', 'Compile a project through the isolated worker', { id: z.string().uuid() }, async ({ id }) => {
     const project = await store.get(id);
     const response = await fetch(`${compilerUrl}/compile`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ latex: project.latex, assets: await store.compileAssets(id) }), signal: AbortSignal.timeout(65000),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ latex: project.latex, format: project.format, bibliography: project.bibliography, assets: await store.compileAssets(id) }), signal: AbortSignal.timeout(130000),
     });
     if (!response.ok) throw new Error(`Compiler returned ${response.status}`);
     const compiled = await response.json() as { ok: boolean; log: string; pdfBase64?: string };
     if (compiled.ok && compiled.pdfBase64) {
-      if ((await store.get(id)).latex !== project.latex) throw new Error('Source changed; retry compile');
+      const latest = await store.get(id);
+      if (latest.latex !== project.latex || latest.bibliography !== project.bibliography) throw new Error('Source changed; retry compile');
       const bytes = Buffer.from(compiled.pdfBase64, 'base64');
       if (bytes.length > 5_000_000 || bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('Invalid compiled PDF');
       await store.savePdf(id, bytes);
