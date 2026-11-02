@@ -1,0 +1,37 @@
+# Patex: human → source → reproducible PDF
+
+Patex is a browser workspace for people writing mathematics and scientific work. The document is the center: prose, equations, citations, executable analysis, results, and figures live in reading order, while the PDF refreshes beside the source. AI helps the author write and fix the document; the human owns every change and the final publication.
+
+## Build order and acceptance checks
+
+### 1. Document-first authoring
+
+- [ ] Keep existing `main.tex` projects working unchanged. Add `main.Rmd`/`main.qmd` documents as first-class project sources; import the user's existing files without silently rewriting them.
+- [ ] Render R/R Markdown code chunks, inline values, LaTeX math, raw LaTeX results, plots, tables, and prose in source order. Start with a real Stats Methods Rmd fixture modeled on the existing homework workflow.
+- [ ] Add Python chunks to the same literate document using a documented engine and reproducible environment; add TypeScript chunks with a controlled Node runner. Preserve state within each language during one build and exchange data through explicit files/artifacts.
+- [ ] Keep the source/PDF split at 50/50 by default. Build after a short typing pause, cancel or supersede stale builds, keep the last good PDF, preserve preview position, and show errors at their source lines. Long code cells need an explicit run control and cache/freeze options.
+- [ ] Allow a project to contain supporting source, images, data, and generated artifacts without making separate script tabs the primary writing flow.
+
+### 2. Publishing essentials
+
+- [ ] Add `.bib` files, cite-key completion, unresolved-citation diagnostics, and BibTeX/Biber/CSL options. Use a build driver that resolves references and citations completely.
+- [ ] Support labels and cross references for equations, figures, tables, and sections; figure/table captions; multiple source files; common journal classes and templates; and selectable PDF engines.
+- [ ] Export PDF plus a clean, portable source bundle (`.tex`/`.Rmd`/`.qmd`, `.bib`, figures, data manifest, dependency lockfiles, build instructions). Test by rebuilding the export on a clean machine.
+- [ ] Add source and output checks: missing assets, undefined references, bad citation keys, overfull boxes, and reproducibility warnings.
+
+### 3. Human-directed AI
+
+- [ ] Offer inline completions and targeted actions on a selection or build error. Show a diff before applying any proposed change; include the exact project files and diagnostics in context with user control.
+- [ ] Connect user-chosen local or remote providers and MCP tools with clear status, permissions, latency, and cancellation. Editing and PDF builds must remain usable when AI is offline.
+- [ ] Record an **opt-in** feedback event when a person accepts, edits, or rejects an AI suggestion. Store source revision, proposed diff, human correction, and build outcome locally; redact secrets and permit review, export, and deletion. Never use private work for model training without explicit consent.
+- [ ] Build a consented evaluation set from those events and measure citation correctness, compile success, mathematical preservation, and human edit distance before changing prompts or models.
+
+### 4. Reliable private beta, then subscription
+
+- [ ] Isolate each untrusted code run from the app and network with CPU, memory, process, time, and storage quotas. Pin runtimes and dependencies; capture provenance for every PDF.
+- [ ] Add project history, backups, recovery, cross-browser and accessibility tests, and an end-to-end test using both an Rmd and a native TeX document.
+- [ ] Before public signups: user and organization identity, project permissions, TLS, audit logs, abuse controls, billing, support, and a security review. Validate demand with researchers using real manuscripts.
+
+## Current baseline
+
+Patex currently auto-compiles a single `main.tex` after a 2.4-second pause and has separate R, Python, and JavaScript tabs with manual artifact insertion. It has no first-class Rmd/Qmd document, bibliography workflow, or opt-in human-feedback dataset. Do not describe those items as implemented until the checks above pass in the deployed browser app and a clean export.
