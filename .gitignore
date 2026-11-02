@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.patex-data/
+*.log
+infra/CODEX_HANDOFF.md

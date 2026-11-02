@@ -1,0 +1,57 @@
+name: patex
+services:
+  app:
+    container_name: patex-app
+    build: { context: ., dockerfile: infra/Dockerfile.app }
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PATEX_DATA_DIR: /data
+      PATEX_ACCESS_TOKEN: ${PATEX_ACCESS_TOKEN:?Set PATEX_ACCESS_TOKEN in .env}
+      COMPILER_URL: http://compiler:3001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      LLAMAFARM_CHAT_URL: ${LLAMAFARM_CHAT_URL:-}
+      LLAMAFARM_MODEL: ${LLAMAFARM_MODEL:-}
+      LLAMAFARM_API_KEY: ${LLAMAFARM_API_KEY:-}
+    volumes:
+      - patex-data:/data
+    # Only localhost: let the separate Codex-managed Tailscale Nginx forward here.
+    ports: ['127.0.0.1:4318:3000']
+    depends_on:
+      compiler: { condition: service_healthy }
+    networks: [patex-internal, patex-outbound]
+    extra_hosts: ['host.docker.internal:host-gateway']
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ['/tmp:size=64m,mode=1777']
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+  compiler:
+    container_name: patex-compiler
+    build: { context: ., dockerfile: infra/Dockerfile.compiler }
+    restart: unless-stopped
+    expose: ['3001']
+    networks: [patex-internal]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ['/tmp:size=256m,mode=1777']
+    pids_limit: 64
+    mem_limit: 768m
+    cpus: 1.5
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 4s
+      retries: 5
+      start_period: 15s
+networks:
+  patex-internal: { driver: bridge, internal: true }
+  patex-outbound: { driver: bridge }
+volumes:
+  patex-data:
