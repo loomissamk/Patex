@@ -10,7 +10,8 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 - [x] Render R chunks, inline R values, mathematics, and an R plot into a PDF in the V100 staging image.
 - [x] Store `references.bib` and build a cited Rmd PDF and a cited native TeX PDF in staging.
 - [x] Add opt-in local accepted/rejected AI feedback records with export and deletion APIs; no model-training transfer.
-- [ ] Verify browser creation/edit/preview and feedback controls through Nginx, then deploy the branch.
+- [x] Verify browser creation/edit/preview and feedback controls against the staging app; confirm Rmd citation text in the generated PDF.
+- [ ] Deploy the branch through Nginx and repeat the live checks without touching existing projects.
 
 ### 1. Document-first authoring
 
@@ -42,4 +43,4 @@ Patex is a browser workspace for people writing mathematics and scientific work.
 
 ## Current baseline
 
-The deployed `main` build currently auto-compiles `main.tex` after a 2.4-second pause and has separate R, Python, and JavaScript tabs with manual artifact insertion. This branch adds the first literate-document, bibliography, and feedback slice. The full publishing and consented evaluation workflow above remains open until the browser, source export, and isolation checks pass.
+The prior deployed build auto-compiles `main.tex` after a 2.4-second pause and has separate R, Python, and JavaScript tabs with manual artifact insertion. This milestone adds the first literate-document, bibliography, and feedback slice. The full publishing and consented evaluation workflow above remains open until the source export, isolation, and remaining document checks pass.

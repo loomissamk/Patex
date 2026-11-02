@@ -8,6 +8,17 @@ import type { Artifact, CompileResult, DocumentFormat } from '../shared/types.js
 
 const execFileAsync = promisify(execFile);
 
+export function attachBibliography(source: string, bibliography: string): string {
+  if (!bibliography) return source;
+  const normalized = source.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n')) return `---\nbibliography: references.bib\n---\n\n${normalized}`;
+  const frontMatterEnd = normalized.indexOf('\n---\n', 4);
+  if (frontMatterEnd < 0) return normalized;
+  const frontMatter = normalized.slice(4, frontMatterEnd);
+  if (/^bibliography\s*:/m.test(frontMatter)) return normalized;
+  return normalized.replace(/^---\n/, '---\nbibliography: references.bib\n');
+}
+
 export async function renderLiterate(source: string, format: Extract<DocumentFormat, 'rmd' | 'qmd'>, assets: Artifact[] = [], bibliography = ''): Promise<CompileResult> {
   if (typeof source !== 'string' || Buffer.byteLength(source, 'utf8') > 200_000) return { ok: false, log: 'Document source exceeds 200 KB.' };
   if (typeof bibliography !== 'string' || Buffer.byteLength(bibliography, 'utf8') > 100_000) return { ok: false, log: 'Bibliography exceeds 100 KB.' };
@@ -15,7 +26,7 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
   const workdir = await mkdtemp(path.join(tmpdir(), 'patex-document-'));
   try {
     const filename = format === 'rmd' ? 'main.Rmd' : 'main.qmd';
-    await writeFile(path.join(workdir, filename), source, { mode: 0o600 });
+    await writeFile(path.join(workdir, filename), attachBibliography(source, bibliography), { mode: 0o600 });
     if (bibliography) await writeFile(path.join(workdir, 'references.bib'), bibliography, { mode: 0o600 });
     await mkdir(path.join(workdir, 'assets'), { mode: 0o700 });
     let total = 0;
@@ -31,7 +42,6 @@ export async function renderLiterate(source: string, format: Extract<DocumentFor
         'render', filename, '--to', 'pdf', '--output', 'main.pdf', '--no-cache',
         '-M', 'pdf-engine:pdflatex', '-M', 'latex-auto-install:false',
       ];
-      if (bibliography) args.push('-M', 'bibliography:references.bib');
       const { stdout, stderr } = await execFileAsync('quarto', args, {
         cwd: workdir, timeout: 120_000, maxBuffer: 1024 * 1024,
         env: {
