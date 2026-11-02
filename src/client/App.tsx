@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, Bot, Check, ChevronDown, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, PanelRightClose, Play, Sparkles, Terminal, Upload, X } from 'lucide-react';
+import { BookOpen, Bot, Check, ChevronDown, Code2, Download, FilePlus, FileText, KeyRound, LoaderCircle, Maximize2, Minimize2, PanelRightClose, Play, Sparkles, Terminal, Upload, X } from 'lucide-react';
 
 type ProjectSummary = { id: string; name: string; updatedAt: string; hasPdf: boolean };
 type Project = ProjectSummary & { latex: string };
@@ -18,7 +18,8 @@ export default function App() {
   const pdfUrlRef = useRef<string | null>(null);
   const [diagnostics, setDiagnostics] = useState('');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [aiOpen, setAiOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(true);
   const [provider, setProvider] = useState<Provider>('llamafarm');
   const [prompt, setPrompt] = useState('');
   const [aiReply, setAiReply] = useState<AiReply | null>(null);
@@ -28,6 +29,7 @@ export default function App() {
   const compilingRef = useRef(false);
   const latestEditRef = useRef({ id: '', source: '', name: '' });
   const fileInput = useRef<HTMLInputElement>(null);
+  const loadedTokenRef = useRef<string | null>(null);
   const projectId = project?.id;
 
   useEffect(() => { sessionStorage.setItem('patex-token', token); }, [token]);
@@ -41,7 +43,9 @@ export default function App() {
   }, [token]);
   const listProjects = useCallback(async () => {
     const result = await api('/api/projects');
-    setProjects(await result.json() as ProjectSummary[]);
+    const entries = await result.json() as ProjectSummary[];
+    setProjects(entries);
+    return entries;
   }, [api]);
   const refreshPdf = useCallback(async (id: string) => {
     try {
@@ -73,12 +77,19 @@ export default function App() {
       setDiagnostics('');
       setAiReply(null);
       setStatus('Ready');
+      sessionStorage.setItem('patex-last-project', next.id);
       void refreshPdf(next.id);
     } catch (e) { setStatus((e as Error).message); }
   }, [api, refreshPdf, dirty, project, latex, projectName]);
   useEffect(() => {
-    void listProjects().catch(e => setStatus((e as Error).message));
-  }, [listProjects]);
+    if (loadedTokenRef.current === token) return;
+    loadedTokenRef.current = token;
+    void listProjects().then(entries => {
+      const previous = sessionStorage.getItem('patex-last-project');
+      const selected = entries.find(p => p.id === previous) || entries[0];
+      if (selected) return openProject(selected.id);
+    }).catch(e => setStatus((e as Error).message));
+  }, [token, listProjects, openProject]);
   const createProject = async () => {
     try {
       const name = window.prompt('New LaTeX project name', 'Untitled Project');
@@ -181,15 +192,18 @@ export default function App() {
       requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; });
     }
   };
-  return <div className="shell">
+  return <div className={`shell${focusMode ? ' focus-mode' : ''}`}>
     <header className="topbar">
       <div className="logo"><span className="brand-symbol">P</span><div><strong>Patex</strong><small>SL Labs / LaTeX Studio</small></div></div>
       <div className="project-heading">{project ? <><FileText size={16}/><input aria-label="Project name" value={projectName} onChange={e => rename(e.target.value)} /></> : <span>Select a project</span>}</div>
       <div className="actions">
         <span className={`status ${status.includes('failed') || status.includes('errors') ? 'bad' : ''}`}>{compiling && <LoaderCircle className="spin" size={14}/>} {status}</span>
+        {focusMode && <select className="project-switcher" aria-label="Switch project" value={project?.id || ''} onChange={e => { if (e.target.value) void openProject(e.target.value); }}><option value="">Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+        <button className="light" onClick={() => void createProject()} title="New project"><FilePlus size={16}/> New</button>
         <button className="light" onClick={downloadText} disabled={!project} title="Export .tex"><Code2 size={16}/> .tex</button>
         <button className="light" onClick={() => void downloadPdf()} disabled={!project || !pdfUrl} title="Download PDF"><Download size={16}/> PDF</button>
         <button className="primary" onClick={() => project && void compile(project.id, latex, projectName, revision.current)} disabled={!project || compiling}><Play size={15} fill="currentColor"/> Compile</button>
+        <button className="light focus-toggle" aria-label={focusMode ? 'Exit 50/50 focus mode' : 'Enter 50/50 focus mode'} aria-pressed={focusMode} onClick={() => setFocusMode(x => !x)}>{focusMode ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}<span>{focusMode ? 'Exit focus' : '50/50 focus'}</span></button>
         <button className="icon-button" title="Toggle AI assistant" aria-label="Toggle AI assistant" onClick={() => setAiOpen(x => !x)}><Sparkles size={19}/></button>
       </div>
     </header>
