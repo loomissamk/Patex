@@ -32,6 +32,9 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const pdfUrlRef = useRef<string | null>(null);
   const activeProjectRef = useRef('');
+  const autoBuildInputRef = useRef('');
+  const needsBuildRef = useRef(false);
+  const [supportRevision, setSupportRevision] = useState(0);
   const [diagnostics, setDiagnostics] = useState('');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -139,6 +142,8 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
   const openProject = useCallback(async (id: string, skipSave = false) => {
     try {
+      const previous = activeProjectRef.current;
+      if (previous && previous !== id && compilingRef.current) void api(`/api/projects/${previous}/cancel-build`, { method: 'POST' }).catch(() => {});
       if (!skipSave) await saveSupport();
       if (!skipSave && dirty && project) {
         await api(`/api/projects/${project.id}`, { method: 'PUT', body: JSON.stringify({ latex, name: projectName }) });
@@ -158,6 +163,8 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
       revision.current++;
       latestEditRef.current = { id: next.id, source: next.latex, name: next.name };
       activeProjectRef.current = next.id;
+      needsBuildRef.current = !next.hasPdf; setSupportRevision(0);
+      autoBuildInputRef.current = next.hasPdf ? JSON.stringify([next.id, next.latex, next.bibliography || '', next.name, 0]) : '';
       if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
       pdfUrlRef.current = null;
       setPdfUrl(null);
@@ -249,6 +256,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const compile = useCallback(async (id: string, source: string, name: string, rev: number, force = false) => {
     if (compilingRef.current) return;
     compilingRef.current = true;
+    if (activeProjectRef.current === id) needsBuildRef.current = false;
     setCompiling(true);
     setStatus('Compiling…');
     setOutputTitle('COMPILE OUTPUT');
@@ -256,6 +264,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
       await saveSupport();
       const pendingBibliography = pendingBibliographyRef.current;
       if (pendingBibliography?.id === id) await saveBibliography(id, pendingBibliography.source);
+      if (activeProjectRef.current !== id || revision.current !== rev) return;
       await save(id, source, name, rev);
       const res = await api(`/api/projects/${id}/compile`, { method: 'POST', body: JSON.stringify({ force }) });
       const result = await res.json() as { ok: boolean; log: string; cached?: boolean; diagnostics?: Diagnostic[] };
@@ -274,25 +283,28 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
       setCompiling(false);
       // Edits made during an in-flight build must get their own build.
       const latest = latestEditRef.current;
-      if (revision.current !== rev && latest.id === id) {
-        window.setTimeout(() => { const next = latestEditRef.current; if (next.id === id) void compile(next.id, next.source, next.name, revision.current); }, 800);
+      if (needsBuildRef.current && latest.id && activeProjectRef.current === latest.id) {
+        window.setTimeout(() => { const next = latestEditRef.current; if (activeProjectRef.current === next.id) void compile(next.id, next.source, next.name, revision.current); }, 800);
       }
     }
   }, [save, saveBibliography, saveSupport, api, refreshPdf, refreshFiles]);
   // Autosave changes `dirty`; this timer deliberately depends on source, not dirty.
   useEffect(() => {
     if (!projectId) return;
-    const timer = window.setTimeout(() => { void compile(projectId, latex, projectName, revision.current); }, 2400);
+    const input = JSON.stringify([projectId, latex, bibliography, projectName, supportRevision]);
+    if (autoBuildInputRef.current === input) return;
+    const timer = window.setTimeout(() => { autoBuildInputRef.current = input; void compile(projectId, latex, projectName, revision.current); }, 2400);
     return () => window.clearTimeout(timer);
-  }, [latex, bibliography, projectName, projectId, compile]);
-  const edit = (text: string) => { setLatex(text); revision.current++; latestEditRef.current = { id: projectId || '', source: text, name: projectName }; setDirty(true); setStatus('Editing…'); if (compilingRef.current && projectId) void api(`/api/projects/${projectId}/cancel-build`, { method: 'POST' }).catch(() => {}); };
-  const rename = (text: string) => { setProjectName(text); revision.current++; latestEditRef.current = { id: projectId || '', source: latex, name: text }; setDirty(true); };
+  }, [latex, bibliography, projectName, projectId, supportRevision, compile]);
+  const edit = (text: string) => { needsBuildRef.current = true; setLatex(text); revision.current++; latestEditRef.current = { id: projectId || '', source: text, name: projectName }; setDirty(true); setStatus('Editing…'); if (compilingRef.current && projectId) void api(`/api/projects/${projectId}/cancel-build`, { method: 'POST' }).catch(() => {}); };
+  const rename = (text: string) => { needsBuildRef.current = true; setProjectName(text); revision.current++; latestEditRef.current = { id: projectId || '', source: latex, name: text }; setDirty(true); };
   const editScript = (language: ScriptLanguage, source: string) => {
     setScripts(current => ({ ...current, [language]: source }));
     pendingScriptRef.current = { id: projectId || '', language, source };
     setStatus('Editing…');
   };
   const editBibliography = (source: string) => {
+    needsBuildRef.current = true;
     setBibliography(source);
     pendingBibliographyRef.current = { id: projectId || '', source };
     revision.current++;
@@ -490,7 +502,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const openHistory = async () => { if (!project) return; try { await flushProject(); const response = await api(`/api/projects/${project.id}/history`); setHistory(await response.json() as RevisionSummary[]); } catch (error) { setStatus((error as Error).message); } };
   const restoreRevision = async (id: string) => {
     if (!project || !window.confirm('Restore this revision? The current version is saved to history first.')) return;
-    try { await api(`/api/projects/${project.id}/cancel-build`, { method: 'POST' }); await api(`/api/projects/${project.id}/history/${id}/restore`, { method: 'POST' }); pendingSupportRef.current = null; pendingBibliographyRef.current = null; pendingScriptRef.current = null; setHistory(null); await openProject(project.id, true); }
+    try { await api(`/api/projects/${project.id}/cancel-build`, { method: 'POST' }); await api(`/api/projects/${project.id}/history/${id}/restore`, { method: 'POST' }); pendingSupportRef.current = null; pendingBibliographyRef.current = null; pendingScriptRef.current = null; setHistory(null); await openProject(project.id, true); needsBuildRef.current = true; const restored = latestEditRef.current; void compile(restored.id, restored.source, restored.name, revision.current, true); }
     catch (error) { setStatus((error as Error).message); }
   };
   const navigateSource = async (page: number, x: number, y: number) => {
@@ -512,7 +524,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const editorValue = supportPath ? supportText : activeFile === 'latex' ? latex : activeFile === 'bibliography' ? bibliography : scripts[activeFile];
   const editorLanguage = supportPath ? /\.(r)$/i.test(supportPath) ? 'r' : /\.py$/i.test(supportPath) ? 'python' : /\.(js|ts|json)$/i.test(supportPath) ? 'javascript' : /\.bib$/i.test(supportPath) ? 'bibliography' : /\.(tex|latex|sty|cls)$/i.test(supportPath) ? 'latex' : 'rmd' : activeFile === 'latex' ? project?.format === 'rmd' ? 'rmd' : project?.format === 'qmd' ? 'qmd' : 'latex' : activeFile;
   const editActiveFile = (source: string) => {
-    if (supportPath && project) { setSupportText(source); pendingSupportRef.current = { id: project.id, name: supportPath, source }; revision.current++; setStatus('Editing supporting file…'); }
+    if (supportPath && project) { needsBuildRef.current = true; setSupportRevision(value => value + 1); setSupportText(source); pendingSupportRef.current = { id: project.id, name: supportPath, source }; revision.current++; setStatus('Editing supporting file…'); }
     else if (activeFile === 'latex') edit(source);
     else if (activeFile === 'bibliography') editBibliography(source);
     else editScript(activeFile, source);
