@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     echo "${QUARTO_SHA256}  /tmp/quarto.deb" | sha256sum -c - && \
     apt-get install -y --no-install-recommends /tmp/quarto.deb && \
     rm -f /tmp/quarto.deb && rm -rf /var/lib/apt/lists/*
+# Journal classes such as IEEEtran require the standard Times/PS font metrics.
+RUN apt-get update && apt-get install -y --no-install-recommends texlive-fonts-recommended && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force

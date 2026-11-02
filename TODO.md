@@ -1,52 +1,40 @@
-# Patex: human → source → reproducible PDF
+# Patex delivery checklist
 
-Patex is a browser workspace for people writing mathematics and scientific work. The document is the center: prose, equations, citations, executable analysis, results, and figures live in reading order, while the PDF refreshes beside the source. AI helps the author write and fix the document; the human owns every change and the final publication.
+The document remains the center: human prose, math, citations, executable analysis, and figures flow into a PDF beside the source. The author controls AI changes and publication.
 
-## Build order and acceptance checks
+## Implemented research pilot
 
-### Working branch milestone
+- [x] Native TeX/Rmd/Qmd documents, 50/50 view, collapsible Projects, Focus, adjustable split, portable keyboard labels.
+- [x] ZIP/folder import with real helpers, figures, data, nested paths, source preservation, and a main-document selector.
+- [x] Full project ZIP export, file hashes, worker-image provenance, bibliography and lockfile preservation.
+- [x] Multi-pass latexmk, BibTeX/Biber, selectable native TeX engines, article/AMS/IEEE templates.
+- [x] Citation/label completion, unresolved-reference warnings, build diagnostics and last-good PDF retention.
+- [x] Disposable networkless code jobs, resource/queue limits, cancellation and superseded-result checks.
+- [x] Identical-result cache and bounded pure-R analysis cache with manual recomputation.
+- [x] PDF.js selectable text/page/zoom controls and native TeX SyncTeX navigation.
+- [x] Project files, recoverable archive, source/support-file version history, private snapshot scripts.
+- [x] Separate pilot accounts, one-use invitations, passwords, revocable access, scoped MCP/API tokens.
+- [x] Offline expression library, rendered previews, how-to, editable snippet fields, local syntax/typo checks.
+- [x] Inline AI toggle, selection edits, reviewed diffs, stale-edit guard, cancellation, bounded connection tests.
+- [x] Optional local AI decision records with export/delete; no implicit training transfer.
 
-- [x] Preserve old TeX project data while adding `main.Rmd` and `main.qmd` project formats and source tabs.
-- [x] Render R chunks, inline R values, mathematics, and an R plot into a PDF in the V100 staging image.
-- [x] Store `references.bib` and build a cited Rmd PDF and a cited native TeX PDF in staging.
-- [x] Add opt-in local accepted/rejected AI feedback records with export and deletion APIs; no model-training transfer.
-- [x] Verify browser creation/edit/preview and feedback controls against the staging app; confirm Rmd citation text in the generated PDF.
-- [x] Deploy through Nginx; verify live Rmd and Qmd computed PDF text, resolve an Rmd citation, and preserve the existing homework PDF byte for byte.
-- [x] Compile an existing single-file matrix homework unchanged; compile a substantial statistics homework after embedding its external R helper in a copy. Render a standalone mixed R/Python/typed Node/math/plot/citation example in staging and live Patex, and inspect both PDF pages.
-- [x] Audit 30 active Matrix Theory and Statistics source files through the live compiler. Route `.Rmd` through native R Markdown for closer pagination; verify 18/19 Matrix files unchanged, 1/11 Statistics files unchanged, and all 10 remaining Statistics files as one-file copies with their shared helper embedded. Keep the detailed private audit outside this public repo.
+## Remaining product work
 
-### 1. Document-first authoring
+- [ ] Source/PDF navigation for Rmd/Qmd with honest mappings through generated documents.
+- [ ] Full TypeScript toolchain, reliable repeated Node chunks, explicit cross-language data/state sharing.
+- [ ] Quarto inline-only engine detection, pure-R cache coverage beyond conventional backtick chunks, explicit per-cell execution/freeze controls.
+- [ ] Project-specific dependency-image profiles and verified installation from renv/requirements/npm locks; no runtime downloads in isolated jobs.
+- [ ] Richer reference management/CSL UI, journal-specific validation, mathematical semantic checks, searchable personal snippets.
+- [ ] External MCP tool consumption inside the assistant with explicit permissions; complete project-context controls for AI.
+- [ ] Optional post-accept human-correction/build-outcome records with redaction, consent, evaluation datasets and measured model quality.
+- [ ] Real-time multiuser editing, organizations/project sharing, accessible keyboard dialogs and complete browser/assistive-technology coverage.
+- [ ] Backup retention, encrypted off-host copies and automated periodic disaster-recovery drills.
 
-- [ ] Keep existing `main.tex` projects working unchanged. Add `main.Rmd`/`main.qmd` documents as first-class project sources; import the user's existing files without silently rewriting them.
-- [ ] Render R/R Markdown code chunks, inline values, LaTeX math, raw LaTeX results, plots, tables, and prose in source order. Start with a real Stats Methods Rmd fixture modeled on the existing homework workflow.
-- [ ] Detect inline-only Qmd engine requirements and either choose the correct engine from its inline language or show a clear build diagnostic. Quarto currently leaves an R inline expression literal when the document has neither a code cell nor explicit `engine: knitr`.
-- [ ] Make the tested Python and Node chunks a reliable product feature: pin the exact runtimes, test repeated chunks and shared state, support a complete TypeScript toolchain, and provide an explicit path for sharing data across languages.
-- [ ] Keep the source/PDF split at 50/50 by default. Build after a short typing pause, cancel or supersede stale builds, keep the last good PDF, preserve preview position, and show errors at their source lines. Long code cells need an explicit run control and cache/freeze options.
-- [ ] Allow a project to contain supporting source, images, data, and generated artifacts without making separate script tabs the primary writing flow.
-- [ ] Import an existing multi-file Rmd project with sourced R helpers, data, and its declared packages. The current compiler cannot render such a project unchanged from a single source upload.
-- [ ] Import an existing TeX project with its figures and subdirectories. The citation-audit source still needs its external PNG folder.
+## Public subscription gate
 
-### 2. Publishing essentials
+- [ ] Five researchers complete real manuscripts; record import/compile failures, time to first PDF, weekly use and willingness to pay. Follow [PILOT.md](PILOT.md).
+- [ ] Operator-owned public domain/TLS and production secrets, verified provider credentials, operational monitoring and alerts.
+- [ ] Independent security review, organization authorization, password recovery/MFA, durable quotas/audit logs, abuse response and stronger tenant-isolation assessment.
+- [ ] Billing provider, webhook reconciliation/idempotency, plans, cancellation/refunds, legal/privacy terms, support and data-deletion/export policy.
 
-- [ ] Add `.bib` files, cite-key completion, unresolved-citation diagnostics, and BibTeX/Biber/CSL options. Use a build driver that resolves references and citations completely.
-- [ ] Support labels and cross references for equations, figures, tables, and sections; figure/table captions; multiple source files; common journal classes and templates; and selectable PDF engines.
-- [ ] Export PDF plus a clean, portable source bundle (`.tex`/`.Rmd`/`.qmd`, `.bib`, figures, data manifest, dependency lockfiles, build instructions). Test by rebuilding the export on a clean machine.
-- [ ] Add source and output checks: missing assets, undefined references, bad citation keys, overfull boxes, and reproducibility warnings.
-
-### 3. Human-directed AI
-
-- [ ] Offer inline completions and targeted actions on a selection or build error. Show a diff before applying any proposed change; include the exact project files and diagnostics in context with user control.
-- [ ] Connect user-chosen local or remote providers and MCP tools with clear status, permissions, latency, and cancellation. Editing and PDF builds must remain usable when AI is offline.
-- [ ] Record an **opt-in** feedback event when a person accepts, edits, or rejects an AI suggestion. Store source revision, proposed diff, human correction, and build outcome locally; redact secrets and permit review, export, and deletion. Never use private work for model training without explicit consent.
-- [ ] Build a consented evaluation set from those events and measure citation correctness, compile success, mathematical preservation, and human edit distance before changing prompts or models.
-
-### 4. Reliable private beta, then subscription
-
-- [ ] Isolate each untrusted code run from the app and network with CPU, memory, process, time, and storage quotas. Pin runtimes and dependencies; capture provenance for every PDF.
-- [ ] Add project history, backups, recovery, cross-browser and accessibility tests, and an end-to-end test using both an Rmd and a native TeX document.
-- [ ] Add project archive/delete and restore controls so users can clear the workspace without server filesystem access.
-- [ ] Before public signups: user and organization identity, project permissions, TLS, audit logs, abuse controls, billing, support, and a security review. Validate demand with researchers using real manuscripts.
-
-## Current baseline
-
-The prior deployed build auto-compiles `main.tex` after a 2.4-second pause and has separate R, Python, and JavaScript tabs with manual artifact insertion. This milestone adds the first literate-document, bibliography, and feedback slice. The full publishing and consented evaluation workflow above remains open until the source export, isolation, and remaining document checks pass.
+Passing the private pilot checks is not a public subscription launch. See [PILOT-ACCEPTANCE.md](PILOT-ACCEPTANCE.md) for evidence and limits.
