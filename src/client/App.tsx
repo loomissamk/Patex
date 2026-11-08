@@ -8,6 +8,8 @@ import AccountPanel from './AccountPanel';
 import MathLibrary from './MathLibrary';
 import { diffLines } from 'diff';
 import { publishingTemplates } from '../shared/publishing-templates';
+import Paywall from './Paywall';
+import AdSlot from './AdSlot';
 import { defaultScripts, scriptFiles } from '../shared/scripts';
 import type { ArtifactSummary, Diagnostic, DocumentFormat, Project, ProjectSummary, ProjectFileSummary, ProjectScripts, RevisionSummary, ScriptLanguage } from '../shared/types';
 type Provider = 'llamafarm' | 'anthropic' | 'openai';
@@ -64,6 +66,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [insertion, setInsertion] = useState<{ template: string; block: boolean; nonce: number }>();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [monetization, setMonetization] = useState<{ paid: boolean; adsEnabled: boolean; admobAppId: string; admobBannerAdUnit: string } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [projectFiles, setProjectFiles] = useState<ProjectFileSummary[]>([]);
   const [supportPath, setSupportPath] = useState<string | null>(null);
@@ -194,6 +197,12 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
     } catch (e) { setStatus((e as Error).message); }
   }, [api, refreshPdf, refreshFiles, saveSupport, dirty, project, latex, projectName]);
   useEffect(() => { void listProjects().catch(error => setStatus((error as Error).message)); }, [listProjects]);
+  useEffect(() => {
+    api('/api/monetization/config')
+      .then(r => r.json())
+      .then(setMonetization)
+      .catch(() => setMonetization({ paid: false, adsEnabled: true, admobAppId: '', admobBannerAdUnit: '' }));
+  }, [api]);
   useEffect(() => {
     if (loadedTokenRef.current === token) return;
     loadedTokenRef.current = token;
@@ -564,6 +573,7 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
         <button className="icon-button" title="Connections" aria-label="Connections" onClick={() => { setConnectionsOpen(x => !x); setAiOpen(false); setLibraryOpen(false); }}><Settings2 size={19}/></button>
       </div>
     </header>
+    <Paywall api={api} onUpgrade={() => setMonetization(m => ({ admobAppId: m?.admobAppId ?? "", admobBannerAdUnit: m?.admobBannerAdUnit ?? "", paid: true, adsEnabled: false }))} />
     <div className={`workbench${resizing ? ' resizing' : ''}`} ref={workbenchRef} style={{ '--editor-width': `${editorWidth}%` } as CSSProperties}>
       <aside className="sidebar">
         <div className="sidebar-heading"><strong>WORKSPACE</strong><button className="icon-button" title="New project" disabled={creating} onClick={() => setNewProjectOpen(true)}><FilePlus size={18}/></button></div>
@@ -620,5 +630,6 @@ function Workspace({ user, logout }: { user: SessionUser; logout: () => void }) 
         <button type="submit" className="primary" disabled={creating || !draftName.trim()}>{creating ? 'Creating…' : 'Create document'}</button>
       </form>
     </div>}
+    <AdSlot admobAppId={monetization?.admobAppId || ""} admobBannerAdUnit={monetization?.admobBannerAdUnit || ""} adsEnabled={monetization?.adsEnabled !== false} />
   </div>;
 }
