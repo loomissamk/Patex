@@ -13,7 +13,7 @@ import { compilerRequest, WorkerUnavailable } from './compiler-client.js';
 import { Accounts, cookieToken, matchesMaster, sessionCookie, type PublicAccount } from './auth.js';
 import { publishingIndex } from './publishing.js';
 import { publishingTemplates } from '../shared/publishing-templates.js';
-import { loadMonetizationConfig, createPaypalOrder, capturePaypalOrder, SubscriptionStore } from './monetization.js';
+import { loadMonetizationConfig, SubscriptionStore } from './monetization.js';
 
 export function createApp(store: ProjectStore, options: { token?: string; compilerUrl?: string } = {}) {
   const app = express();
@@ -74,20 +74,10 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
     } catch (error) { next(error); }
   });
   app.post('/auth/logout', async (req, res) => { const token = cookieToken(req.header('cookie')); if (token) await accounts.revoke(token); res.setHeader('Set-Cookie', sessionCookie('')); res.sendStatus(204); });
-    // PayPal webhook: called by PayPal servers, no session cookie.
-  app.post('/api/monetization/webhook', async (req, res, next) => {
-    try {
-      const secret = process.env.PATEX_PAYPAL_WEBHOOK_SECRET || '';
-      const header = req.header('paypal-auth-assertion') || '';
-      if (secret && header !== secret) { res.status(401).json({ error: 'Invalid webhook' }); return; }
-      const body = req.body || {};
-      const eventType = body.event_type || body['event_type'];
-      const resource = body.resource || {};
-      if (eventType !== 'CHECKOUT.ORDER.APPROVED' && eventType !== 'PAYMENT.CAPTURE.COMPLETED') { res.json({ received: true }); return; }
-      const accountId = typeof resource.accountId === 'string' ? resource.accountId : '';
-      if (accountId && resource.status === 'COMPLETED') await subs.grant(accountId, resource.id);
-      res.json({ received: true });
-    } catch (error) { next(error); }
+  // No verified PayPal webhook flow exists. Never grant an entitlement from a
+  // caller-supplied event body or a caller-supplied header.
+  app.post('/api/monetization/webhook', (_req, res) => {
+    res.status(503).json({ error: 'Billing is not available' });
   });
   app.use(['/api', '/mcp'], async (req, res, next) => {
     try {
@@ -107,39 +97,24 @@ export function createApp(store: ProjectStore, options: { token?: string; compil
     try {
       const user = res.locals.user as PublicAccount;
       const sub = await subs.get(user.id);
-      res.json({ paid: sub?.paid === true, plan: sub?.plan || 'free', since: sub?.since || null, adsEnabled: sub?.paid !== true });
+      res.json({ paid: sub?.paid === true, plan: sub?.plan || 'free', since: sub?.since || null, adsEnabled: false, billingAvailable: false });
     } catch (error) { next(error); }
   });
   app.get('/api/monetization/config', async (req, res, next) => {
     try {
-      const user = res.locals.user as PublicAccount;
-      const paid = await subs.isPaid(user.id);
       res.json({
         price: monetization.proPrice, currency: monetization.proCurrency,
-        paypalMode: monetization.paypalMode, paypalConfigured: Boolean(monetization.paypalClientId),
+        paypalMode: monetization.paypalMode, paypalConfigured: false, billingAvailable: false,
         admobAppId: monetization.admobAppId, admobBannerAdUnit: monetization.admobBannerAdUnit,
-        adsEnabled: !paid,
+        adsEnabled: false,
       });
     } catch (error) { next(error); }
   });
-  app.post('/api/monetization/paypal/create-order', async (req, res, next) => {
-    try {
-      if (!monetization.paypalClientId) { res.status(503).json({ error: 'Payments are not configured yet' }); return; }
-      const email = typeof req.body?.email === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(req.body.email) ? req.body.email : undefined;
-      res.json(await createPaypalOrder(monetization, email));
-    } catch (error) { next(error); }
+  app.post('/api/monetization/paypal/create-order', (_req, res) => {
+    res.status(503).json({ error: 'Billing is not available' });
   });
-  app.post('/api/monetization/paypal/capture', async (req, res, next) => {
-    try {
-      if (!monetization.paypalClientId) { res.status(503).json({ error: 'Payments are not configured yet' }); return; }
-      const orderId = req.body?.orderId;
-      if (typeof orderId !== 'string' || !/^[A-Z0-9]{10,30}$/.test(orderId)) { res.status(400).json({ error: 'Invalid order' }); return; }
-      const result = await capturePaypalOrder(monetization, orderId);
-      if (result.status !== 'COMPLETED') { res.status(402).json({ error: 'Payment was not completed' }); return; }
-      const user = res.locals.user as PublicAccount;
-      await subs.grant(user.id, orderId);
-      res.json({ paid: true, plan: 'pro', since: new Date().toISOString() });
-    } catch (error) { next(error); }
+  app.post('/api/monetization/paypal/capture', (_req, res) => {
+    res.status(503).json({ error: 'Billing is not available' });
   });
   
   app.get('/api/runtime', async (_req, res, next) => { try { if (!options.compilerUrl) throw new Error('Compiler not configured'); res.json(await compilerRequest(options.compilerUrl, 'status', {})); } catch (error) { next(error); } });
