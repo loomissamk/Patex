@@ -4,6 +4,13 @@ Write prose, LaTeX mathematics, citations, and executable analysis in one docume
 
 Patex is a private research pilot. Public subscription launch still needs an operator-owned domain and TLS, billing, account recovery, operational review, and demand validation. See [PILOT-ACCEPTANCE.md](PILOT-ACCEPTANCE.md) for measured acceptance and [TODO.md](TODO.md) for remaining work.
 
+Billing and ad placements are disabled in this pilot. The earlier PayPal webhook
+accepted unverified events, and checkout lacked a complete credential and
+order flow. The API now rejects webhook, create-order, and capture requests
+without changing subscription state. Setting payment environment variables
+does not enable billing; a verified integration and separate acceptance are
+required before offering paid plans.
+
 ## Writing
 
 - Source and PDF start at 50/50. Collapse Projects, use Focus, or drag the divider; double-click it to restore equal widths. Keyboard labels use Ctrl/Cmd.
